@@ -1,6 +1,3 @@
-use std::io::BufReader;
-use rodio::Source;
-
 use winit::event_loop::{EventLoop, ControlFlow};
 use winit::event::{Event, WindowEvent};
 
@@ -12,18 +9,6 @@ mod resources;
 mod state;
 
 fn main() {
-    std::thread::spawn(|| {
-        let (_stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
-
-        // Load a sound from a file, using a path relative to Cargo.toml
-        //let file = File::open("res/lowtide.ogg").unwrap();
-        let source = rodio::Decoder::new(BufReader::new(std::io::Cursor::new(resources::MUSIC))).unwrap();
-        stream_handle.play_raw(source.speed(0.5).convert_samples().repeat_infinite()).unwrap();
-
-        loop { std::thread::sleep(std::time::Duration::from_millis(16)); }
-    });
-
-
     let event_loop = EventLoop::new();
 
     let title = "void";
@@ -36,28 +21,25 @@ fn main() {
 
     use futures::executor::block_on;
 
-    let mut state = block_on(gamestate::GameState::new(window));
+    let mut state = block_on(gamestate::GameSystems::new(window));
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
             Event::MainEventsCleared => {
+                // simple fixed gameloop, we're going to let vsync handle the framerate
                 state.update();
                 state.render();
+
+                // TODO: sleep if frames are too fast
             },
             Event::WindowEvent {
                 ref event,
                 window_id,
-            } if window_id == state.ctx.window.id() => {
+            } if window_id == state.gc.window.id() => {
                 if !state.handle_input_events(event) {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                        // WindowEvent::Resized(physical_size) => {
-                        //     state.resize(*physical_size);
-                        // }
-                        // WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        //     state.resize(**new_inner_size);
-                        // }
                         _ => {}
                     }
                 }

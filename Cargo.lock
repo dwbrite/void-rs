@@ -2483,6 +2483,7 @@ name = "void-rs"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "crossbeam-channel",
  "futures",
  "image",
  "rodio",
