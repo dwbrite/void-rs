@@ -1,4 +1,3 @@
-use std::fs::File;
 use std::io::BufReader;
 use rodio::Source;
 
@@ -6,15 +5,17 @@ use winit::event_loop::{EventLoop, ControlFlow};
 use winit::event::{Event, WindowEvent, KeyboardInput, ElementState, VirtualKeyCode};
 
 use winit::dpi::PhysicalSize;
+mod gamestate;
 mod graphics;
+mod resources;
 
 fn main() {
     std::thread::spawn(|| {
         let (_stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
 
         // Load a sound from a file, using a path relative to Cargo.toml
-        let file = File::open("res/lowtide.ogg").unwrap();
-        let source = rodio::Decoder::new(BufReader::new(file)).unwrap();
+        //let file = File::open("res/lowtide.ogg").unwrap();
+        let source = rodio::Decoder::new(BufReader::new(std::io::Cursor::new(resources::MUSIC))).unwrap();
         stream_handle.play_raw(source.speed(0.5).convert_samples().repeat_infinite()).unwrap();
 
         loop { std::thread::sleep(std::time::Duration::from_millis(16)); }
@@ -34,7 +35,7 @@ fn main() {
 
     use futures::executor::block_on;
 
-    let mut state = block_on(graphics::GameState::new(&window));
+    let mut state = block_on(gamestate::GameState::new(window));
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
@@ -45,7 +46,7 @@ fn main() {
             Event::WindowEvent {
                 ref event,
                 window_id,
-            } if window_id == window.id() => {
+            } if window_id == state.ctx.window.id() => {
                 if !state.input(event) {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
