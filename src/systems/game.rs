@@ -3,11 +3,11 @@ use winit::window::Window;
 use crate::graphics::{GraphicsContext, FrameContext};
 use crate::graphics::background::BgRenderContext;
 use crate::graphics::text::{TextRenderContext, BasicText};
-use crate::state::controls::Controls;
-use crate::state::audio::{AudioSystem, AudioSysMsg};
+use crate::systems::controls::Controls;
+use crate::systems::audio::{AudioSystem, AudioSysMsg};
 use crossbeam_channel::Sender;
 
-pub(crate) struct GameSystems {
+pub struct GameSystem {
     pub(crate) gc: GraphicsContext,
     bg_render: BgRenderContext,
     text_render: TextRenderContext,
@@ -16,8 +16,8 @@ pub(crate) struct GameSystems {
     pub(crate) _ticks: u64,
 }
 
-impl GameSystems {
-    pub(crate) async fn new(window: Window) -> Self {
+impl GameSystem {
+    pub async fn new(window: Window) -> Self {
         let gc = GraphicsContext::new(window).await;
         let bg_render = BgRenderContext::build(&gc);
         let text_render = TextRenderContext::build(&gc);
@@ -25,7 +25,7 @@ impl GameSystems {
         let controls = Controls::default();
         let audio_tx =  AudioSystem::start();
 
-        GameSystems {
+        GameSystem {
             gc,
             bg_render,
             text_render,
@@ -35,14 +35,14 @@ impl GameSystems {
         }
     }
 
-    pub(crate) fn recreate_swapchain(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+    pub fn recreate_swapchain(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         self.gc.size = new_size;
         self.gc.sc_desc.width = new_size.width;
         self.gc.sc_desc.height = new_size.height;
         self.gc.swap_chain = self.gc.device.create_swap_chain(&self.gc.surface, &self.gc.sc_desc);
     }
 
-    pub(crate) fn handle_input_events(&mut self, event: &WindowEvent) -> bool {
+    pub fn handle_input_events(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::KeyboardInput { input, ..  } => {
                 match input.state {
@@ -64,11 +64,11 @@ impl GameSystems {
         false
     }
 
-    pub(crate) fn update(&mut self) {
+    pub fn update(&mut self) {
         self._ticks+=1;
     }
 
-    pub(crate) fn render(&mut self) {
+    pub fn render(&mut self) {
         let frame_tex = {
             let frame = self.gc.swap_chain.get_current_frame();
             use wgpu::SwapChainError::*;

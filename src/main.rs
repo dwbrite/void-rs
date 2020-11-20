@@ -2,11 +2,11 @@ use winit::event_loop::{EventLoop, ControlFlow};
 use winit::event::{Event, WindowEvent};
 
 use winit::dpi::PhysicalSize;
+use crate::systems::game::GameSystem;
 
-mod gamestate;
 mod graphics;
 mod resources;
-mod state;
+mod systems;
 
 fn main() {
     let event_loop = EventLoop::new();
@@ -21,7 +21,7 @@ fn main() {
 
     use futures::executor::block_on;
 
-    let mut state = block_on(gamestate::GameSystems::new(window));
+    let mut state = block_on(GameSystem::new(window));
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
