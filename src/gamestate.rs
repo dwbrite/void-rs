@@ -1,13 +1,16 @@
-use winit::event::WindowEvent;
+use winit::event::{WindowEvent, ElementState};
 use winit::window::Window;
 use crate::graphics::{GraphicsContext, FrameContext};
 use crate::graphics::background::BgRenderContext;
 use crate::graphics::text::{TextRenderContext, BasicText};
+use crate::state::controls;
 
 pub(crate) struct GameState {
     pub(crate) ctx: GraphicsContext,
     idk_bg: BgRenderContext,
     txt_lol: TextRenderContext,
+    controls: controls::Controls,
+    pub(crate) _ticks: u64,
 }
 
 impl GameState {
@@ -15,11 +18,14 @@ impl GameState {
         let ctx = GraphicsContext::new(window).await;
         let idk_bg = BgRenderContext::build(&ctx);
         let txt_lol = TextRenderContext::build(&ctx);
+        let controls = controls::Controls::default();
 
         GameState {
             ctx,
             idk_bg,
             txt_lol,
+            controls,
+            _ticks: 0,
         }
     }
 
@@ -30,7 +36,25 @@ impl GameState {
         self.ctx.swap_chain = self.ctx.device.create_swap_chain(&self.ctx.surface, &self.ctx.sc_desc);
     }
 
-    pub(crate) fn input(&mut self, _event: &WindowEvent) -> bool {
+    pub(crate) fn handle_input_events(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::KeyboardInput { input, ..  } => {
+                match input.state {
+                    ElementState::Pressed => {
+                        if let Some(keycode) = input.virtual_keycode {
+                            self.controls.key_pressed(keycode);
+                        }
+                    }
+                    ElementState::Released => {
+                        if let Some(keycode) = input.virtual_keycode {
+                            self.controls.key_released(keycode);
+                        }
+                    }
+                }
+            }
+            // WindowEvent::ModifiersChanged(_) => {}
+            _ => {}
+        }
         false
     }
 
