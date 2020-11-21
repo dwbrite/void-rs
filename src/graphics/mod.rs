@@ -3,6 +3,7 @@ use wgpu::RequestAdapterOptions;
 
 pub(crate) mod background;
 pub(crate) mod text;
+pub(crate) mod draw;
 
 pub(crate) struct GraphicsContext {
     pub(crate) window: winit::window::Window,

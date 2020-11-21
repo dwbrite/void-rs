@@ -1,9 +1,10 @@
-use wgpu_glyph::{GlyphBrush, ab_glyph, Section, Text, GlyphBrushBuilder};
+use wgpu_glyph::{GlyphBrush, ab_glyph, Section, Text, GlyphBrushBuilder, Extra};
 use crate::graphics::{GraphicsContext, FrameContext};
 use crate::resources;
 
 pub(crate) struct TextRenderContext {
     glyph_brush: GlyphBrush<()>,
+    sections: Vec<Section<'static, Extra>>,
 }
 
 pub(crate) struct BasicText {
@@ -22,6 +23,7 @@ impl TextRenderContext {
 
         TextRenderContext {
             glyph_brush,
+            sections: Vec::with_capacity(64),
         }
     }
 
@@ -31,7 +33,8 @@ impl TextRenderContext {
             text: vec![
                 Text::new(&text.str)
                     .with_scale(8.0)
-                    .with_color(text.color),
+                    .with_color(text.color)
+                    ,
             ],
             ..Section::default()
         };

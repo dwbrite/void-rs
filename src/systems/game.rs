@@ -6,6 +6,8 @@ use crate::graphics::text::{TextRenderContext, BasicText};
 use crate::systems::controls::Controls;
 use crate::systems::audio::{AudioSystem, AudioSysMsg};
 use crossbeam_channel::Sender;
+use crate::graphics::draw::DrawCommand;
+use std::collections::VecDeque;
 
 pub struct GameSystem {
     pub(crate) gc: GraphicsContext,
@@ -14,6 +16,7 @@ pub struct GameSystem {
     controls: Controls,
     _audio_tx: Sender<AudioSysMsg>,
     pub(crate) _ticks: u64,
+    draw_queue: VecDeque<DrawCommand>,
 }
 
 impl GameSystem {
@@ -32,6 +35,7 @@ impl GameSystem {
             controls,
             _audio_tx: audio_tx,
             _ticks: 0,
+            draw_queue: VecDeque::with_capacity(64),
         }
     }
 
@@ -66,6 +70,13 @@ impl GameSystem {
 
     pub fn update(&mut self) {
         self._ticks+=1;
+
+        self.draw_queue.push_back(DrawCommand::DrawBg);
+        self.draw_queue.push_back(DrawCommand::DrawString(BasicText{
+            pos: (16.0, 288.0 - 20.0),
+            str: "o hej".to_string(),
+            color: [1.0, 1.0, 1.0, 1.0],
+        }))
     }
 
     pub fn render(&mut self) {
@@ -97,12 +108,20 @@ impl GameSystem {
             frame_tex: &frame_tex,
         };
 
-        self.bg_render.draw(&mut f_ctx);
-        self.text_render.draw(&mut f_ctx, BasicText {
-            pos: (0.0, 0.0),
-            str: "idk bro".to_string(),
-            color: [1.0, 1.0, 1.0, 1.0],
-        });
+        while !self.draw_queue.is_empty() {
+            match self.draw_queue.pop_front().unwrap() {
+                DrawCommand::DrawBg => { self.bg_render.draw(&mut f_ctx); }
+                DrawCommand::DrawChar => {}
+                DrawCommand::DrawString(txt) => { self.text_render.draw(&mut f_ctx, txt); }
+            }
+        }
+
+        // self.bg_render.draw(&mut f_ctx);
+        // self.text_render.draw(&mut f_ctx, BasicText {
+        //     pos: (0.0, 0.0),
+        //     str: "idk bro".to_string(),
+        //     color: [1.0, 1.0, 1.0, 1.0],
+        // });
 
 
         self.gc.queue.submit(std::iter::once(encoder.finish()));
