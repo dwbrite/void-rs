@@ -1,0 +1,18 @@
+<chapter voice="universe">
+    <line><s0>...</s0></line><await/>
+    <line>The <s4>universe</s4> is silent</line><await/>
+    <line><s0>...</s0></line><await/>
+    <line>What's <s4>that?</s4></line><await/>
+    <line>A faint murmur <s4>masquerades</s4> amongst the <s4>silence.</s4></line><await/>
+    <?play song=lowtide?>
+    <line>It's <s1>you.</s1></line><await/>
+    <line><s0>...</s0></line>
+    <line>But wait <s1> -- </s1> who <s2>are</s2> you?</line><await/>
+    <line>You have no memories<s0>...</s0></line><await/>
+    <line>You just<s0>...</s0> exist.</line><await/>
+    <line>You <s2>just</s2><s0>...</s0> are.</line><await/>
+    <line>No <s1>past</s1><s0>...</s0></line><await/>
+    <line><s2>Just</s2> the present.</line><await/>
+    <line>Just <s1>now.</s1></line>
+    <line><s0>...</s0></line>
+</chapter>
