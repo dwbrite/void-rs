@@ -1,9 +1,10 @@
-use winit::event_loop::{EventLoop, ControlFlow};
 use winit::event::{Event, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
 
-use winit::dpi::PhysicalSize;
 use crate::systems::game::GameSystem;
+use winit::dpi::PhysicalSize;
 
+mod dialogue;
 mod graphics;
 mod resources;
 mod systems;
@@ -29,10 +30,11 @@ fn main() {
             Event::MainEventsCleared => {
                 // simple fixed gameloop, we're going to let vsync handle the framerate
                 state.update();
+                state.draw();
                 state.render();
 
                 // TODO: sleep if frames are too fast
-            },
+            }
             Event::WindowEvent {
                 ref event,
                 window_id,

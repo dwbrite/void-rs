@@ -1,18 +1,17 @@
 use winit::event::VirtualKeyCode;
 
 pub struct Controls {
-    // pub(crate) input_char: String,
-    pub(crate) enter: bool,
-    pub(crate) up: bool,
-    pub(crate) down: bool,
-    pub(crate) left: bool,
-    pub(crate) right: bool,
-    pub(crate) shift: bool,
-    pub(crate) caps: bool
+    pub enter: bool,
+    pub up: bool,
+    pub down: bool,
+    pub left: bool,
+    pub right: bool,
+    pub shift: bool,
+    pub caps: bool
 }
 
 impl Controls {
-    pub(crate) fn key_pressed(&mut self, keycode: VirtualKeyCode) {
+    pub fn key_pressed(&mut self, keycode: VirtualKeyCode) {
         match keycode {
             VirtualKeyCode::Up => { self.up = true; self.down = false; }
             VirtualKeyCode::Down => { self.down = true; self.up = false; }
@@ -26,7 +25,7 @@ impl Controls {
         }
     }
 
-    pub(crate) fn key_released(&mut self, keycode: VirtualKeyCode) {
+    pub fn key_released(&mut self, keycode: VirtualKeyCode) {
         match keycode {
             VirtualKeyCode::Up => { self.up = false; }
             VirtualKeyCode::Down => { self.down = false; }

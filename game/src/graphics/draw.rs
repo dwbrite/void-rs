@@ -1,6 +1,6 @@
 use crate::graphics::text::BasicText;
 
-pub(crate) enum DrawCommand {
+pub enum DrawCommand {
     DrawBg,
     DrawChar,
     DrawString(BasicText),

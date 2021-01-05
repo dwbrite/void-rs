@@ -2,19 +2,19 @@ use wgpu_glyph::{GlyphBrush, ab_glyph, Section, Text, GlyphBrushBuilder, Extra};
 use crate::graphics::{GraphicsContext, FrameContext};
 use crate::resources;
 
-pub(crate) struct TextRenderContext {
+pub struct TextRenderContext {
     glyph_brush: GlyphBrush<()>,
     sections: Vec<Section<'static, Extra>>,
 }
 
-pub(crate) struct BasicText {
-    pub(crate) pos: (f32, f32),
-    pub(crate) str: String,
-    pub(crate) color: [f32; 4],
+pub struct BasicText {
+    pub pos: (f32, f32),
+    pub str: String,
+    pub color: [f32; 4],
 }
 
 impl TextRenderContext {
-    pub(crate) fn build(ctx: &GraphicsContext) -> TextRenderContext {
+    pub fn build(ctx: &GraphicsContext) -> TextRenderContext {
         let font = ab_glyph::FontArc::try_from_slice(resources::FONT)
             .expect("Load font");
 
@@ -27,7 +27,7 @@ impl TextRenderContext {
         }
     }
 
-    pub(crate) fn draw(&mut self, f_ctx: &mut FrameContext, text: BasicText) {
+    pub fn draw(&mut self, f_ctx: &mut FrameContext, text: BasicText) {
         let section = Section {
             screen_position: text.pos,
             text: vec![

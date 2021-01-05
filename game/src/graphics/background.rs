@@ -39,7 +39,7 @@ const VERTICES: &[VertexData] = &[
 ];
 
 
-pub(crate) struct BgRenderContext {
+pub struct BgRenderContext {
     vertex_buffer: wgpu::Buffer,
     render_pipeline: wgpu::RenderPipeline,
     _bind_group_layout: wgpu::BindGroupLayout,
@@ -47,7 +47,7 @@ pub(crate) struct BgRenderContext {
 }
 
 impl BgRenderContext {
-    pub(crate) fn build(ctx: &GraphicsContext) -> BgRenderContext {
+    pub fn build(ctx: &GraphicsContext) -> BgRenderContext {
 
         let diffuse_bytes = resources::BG;
         let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
@@ -209,7 +209,7 @@ impl BgRenderContext {
         }
     }
 
-    pub(crate) fn draw(&self, f_ctx: &mut FrameContext) {
+    pub fn draw(&self, f_ctx: &mut FrameContext) {
         let mut render_pass = f_ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &f_ctx.frame_tex.view,

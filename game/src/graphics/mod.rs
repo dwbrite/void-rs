@@ -1,24 +1,24 @@
 use winit::window::Window;
 use wgpu::RequestAdapterOptions;
 
-pub(crate) mod background;
-pub(crate) mod text;
-pub(crate) mod draw;
+pub mod background;
+pub mod text;
+pub mod draw;
 
-pub(crate) struct GraphicsContext {
-    pub(crate) window: winit::window::Window,
-    pub(crate) surface: wgpu::Surface,
+pub struct GraphicsContext {
+    pub window: winit::window::Window,
+    pub surface: wgpu::Surface,
 
-    pub(crate) device: wgpu::Device,
-    pub(crate) queue: wgpu::Queue,
-    pub(crate) sc_desc: wgpu::SwapChainDescriptor,
-    pub(crate) swap_chain: wgpu::SwapChain,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    pub sc_desc: wgpu::SwapChainDescriptor,
+    pub swap_chain: wgpu::SwapChain,
 
-    pub(crate) size: winit::dpi::PhysicalSize<u32>,
+    pub size: winit::dpi::PhysicalSize<u32>,
 }
 
 impl GraphicsContext {
-    pub(crate) async fn new(window: Window) -> Self {
+    pub async fn new(window: Window) -> Self {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
@@ -61,8 +61,8 @@ impl GraphicsContext {
     }
 }
 
-pub(crate) struct FrameContext<'a> {
-    pub(crate) ctx: &'a GraphicsContext,
-    pub(crate) encoder: &'a mut wgpu::CommandEncoder,
-    pub(crate) frame_tex: &'a wgpu::SwapChainTexture,
+pub struct FrameContext<'a> {
+    pub ctx: &'a GraphicsContext,
+    pub encoder: &'a mut wgpu::CommandEncoder,
+    pub frame_tex: &'a wgpu::SwapChainTexture,
 }
