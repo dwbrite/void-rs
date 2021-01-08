@@ -858,6 +858,7 @@ dependencies = [
 name = "game"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "bytemuck",
  "crossbeam-channel",
  "futures",
@@ -865,6 +866,7 @@ dependencies = [
  "ir",
  "ir-parser",
  "rodio",
+ "serde",
  "shaderc",
  "wgpu",
  "wgpu_glyph",

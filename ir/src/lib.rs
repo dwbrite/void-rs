@@ -1,7 +1,7 @@
 pub mod ast {
     use serde::{Deserialize, Serialize};
 
-    #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+    #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
     pub enum Instruction {
         Play { sound: String },
     }

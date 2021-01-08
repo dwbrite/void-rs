@@ -1,13 +1,17 @@
-use winit::event::{WindowEvent, ElementState};
-use winit::window::Window;
-use crate::graphics::{GraphicsContext, FrameContext};
+use crate::dialogue::DialogueSystem;
 use crate::graphics::background::BgRenderContext;
-use crate::graphics::text::{TextRenderContext};
-use crate::systems::controls::Controls;
-use crate::systems::audio::{AudioSystem, AudioSysMsg};
-use crossbeam_channel::Sender;
 use crate::graphics::draw::DrawCommand;
+use crate::graphics::text::TextRenderContext;
+use crate::graphics::{FrameContext, GraphicsContext};
+use crate::systems::audio::{AudioSysMsg, AudioSystem};
+use crate::systems::controls::Controls;
+use bincode;
+use crossbeam_channel::Sender;
 use std::collections::VecDeque;
+use std::fs::File;
+use std::io::Read;
+use winit::event::{ElementState, WindowEvent};
+use winit::window::Window;
 
 pub struct IO {
     pub ticks: u64,
@@ -21,7 +25,7 @@ pub struct GameSystem {
     bg_render: BgRenderContext,
     text_render: TextRenderContext,
     pub io: IO,
-    // dialogue: DialogueSystem,
+    dialogue: DialogueSystem,
 }
 
 impl GameSystem {
@@ -31,15 +35,20 @@ impl GameSystem {
         let text_render = TextRenderContext::build(&gc);
 
         let controls = Controls::default();
-        let audio_tx =  AudioSystem::start();
+        let audio_tx = AudioSystem::start();
 
-        // let dialogue = DialogueSystem::default();
+        // todo: stop being so lazy!
+        let mut file = File::open("game/dialogue/en/intro.bincode").unwrap();
+        let mut buffer = vec![];
+        file.read_to_end(&mut buffer).expect("failed to read");
+        let chapter: Option<ir::ast::Chapter> = bincode::deserialize(&buffer[..]).unwrap();
+        let dialogue = DialogueSystem::init(chapter.unwrap());
 
         let io = IO {
             ticks: 0,
             controls,
             audio_tx,
-            draw_queue: VecDeque::with_capacity(64)
+            draw_queue: VecDeque::with_capacity(64),
         };
 
         GameSystem {
@@ -47,7 +56,7 @@ impl GameSystem {
             bg_render,
             text_render,
             io,
-            // dialogue,
+            dialogue,
         }
     }
 
@@ -55,25 +64,26 @@ impl GameSystem {
         self.gc.size = new_size;
         self.gc.sc_desc.width = new_size.width;
         self.gc.sc_desc.height = new_size.height;
-        self.gc.swap_chain = self.gc.device.create_swap_chain(&self.gc.surface, &self.gc.sc_desc);
+        self.gc.swap_chain = self
+            .gc
+            .device
+            .create_swap_chain(&self.gc.surface, &self.gc.sc_desc);
     }
 
     pub fn handle_input_events(&mut self, event: &WindowEvent) -> bool {
         match event {
-            WindowEvent::KeyboardInput { input, ..  } => {
-                match input.state {
-                    ElementState::Pressed => {
-                        if let Some(keycode) = input.virtual_keycode {
-                            self.io.controls.key_pressed(keycode);
-                        }
-                    }
-                    ElementState::Released => {
-                        if let Some(keycode) = input.virtual_keycode {
-                            self.io.controls.key_released(keycode);
-                        }
+            WindowEvent::KeyboardInput { input, .. } => match input.state {
+                ElementState::Pressed => {
+                    if let Some(keycode) = input.virtual_keycode {
+                        self.io.controls.key_pressed(keycode);
                     }
                 }
-            }
+                ElementState::Released => {
+                    if let Some(keycode) = input.virtual_keycode {
+                        self.io.controls.key_released(keycode);
+                    }
+                }
+            },
             // WindowEvent::ModifiersChanged(_) => {}
             _ => {}
         }
@@ -81,13 +91,13 @@ impl GameSystem {
     }
 
     pub fn update(&mut self) {
-        self.io.ticks +=1;
-        // self.dialogue.update(&mut self.io);
+        self.io.ticks += 1;
+        self.dialogue.update(&mut self.io);
     }
 
     pub fn draw(&mut self) {
         self.io.draw_queue.push_back(DrawCommand::DrawBg);
-        // self.dialogue.draw(&mut self.io);
+        self.dialogue.draw(&mut self.io);
     }
 
     pub fn render(&mut self) {
@@ -95,23 +105,28 @@ impl GameSystem {
             let frame = self.gc.swap_chain.get_current_frame();
             use wgpu::SwapChainError::*;
             match frame {
-                Ok(_f) => { _f }
+                Ok(_f) => _f,
                 Err(Outdated) => {
                     self.recreate_swapchain(self.gc.size);
-                    self.gc.swap_chain.get_current_frame()
+                    self.gc
+                        .swap_chain
+                        .get_current_frame()
                         .expect("swapchain failed to get current frame (twice)")
                 }
-                Err(Timeout) => { return /*assume gpu is asleep?*/ }
-                _ => { frame.expect("swapchain failed to get current frame") }
+                Err(Timeout) => {
+                    return; /*assume gpu is asleep?*/
+                }
+                _ => frame.expect("swapchain failed to get current frame"),
             }
-        }.output;
+        }
+        .output;
 
-        let mut encoder = self.gc
+        let mut encoder = self
+            .gc
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
-
 
         let mut f_ctx = FrameContext {
             ctx: &self.gc,
@@ -121,9 +136,13 @@ impl GameSystem {
 
         while !self.io.draw_queue.is_empty() {
             match self.io.draw_queue.pop_front().unwrap() {
-                DrawCommand::DrawBg => { self.bg_render.draw(&mut f_ctx); }
+                DrawCommand::DrawBg => {
+                    self.bg_render.draw(&mut f_ctx);
+                }
                 DrawCommand::DrawChar => {}
-                DrawCommand::DrawString(txt) => { self.text_render.draw(&mut f_ctx, txt); }
+                DrawCommand::DrawString(txt) => {
+                    self.text_render.draw(&mut f_ctx, txt);
+                }
             }
         }
 

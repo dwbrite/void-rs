@@ -40,6 +40,8 @@ use std::io::{Read, Write};
 
 // ChapterParser reads an xml file and turns it into the appropriate
 
+// TODO: make voice a TextProperty on every span
+
 pub fn compile_ir(in_path: &Path, mut chapter: File, out_path: &Path) {
     // in_path might be used for relative file locations
     let mut s = String::new();

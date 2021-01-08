@@ -1,5 +1,5 @@
 use crate::resources;
-use rodio::{OutputStream, OutputStreamHandle, Source};
+use rodio::{OutputStream, OutputStreamHandle, Sample, Source};
 use std::io::BufReader;
 
 pub enum AudioSysMsg {
@@ -10,7 +10,7 @@ pub enum AudioSysMsg {
     _PlayMusic,
     _StopMusic,
 
-    _PlayEffect(usize),
+    PlayEffect(usize),
     _StopEffect(usize),
 
     _Kill,
@@ -18,10 +18,10 @@ pub enum AudioSysMsg {
 
 pub struct AudioSystem {
     _stream: OutputStream,
-    _stream_handle: OutputStreamHandle,
-
+    stream_handle: OutputStreamHandle,
     music: rodio::Sink,
-    _sound_effects: Vec<rodio::Sink>,
+    // sfx_src: Vec<Box<rodio::Decoder<u8>>>,
+    // sound_effects: Vec<rodio::Sink>,
     is_kill: bool,
 }
 
@@ -40,9 +40,10 @@ impl AudioSystem {
 
         Self {
             _stream,
-            _stream_handle: stream_handle,
+            stream_handle: stream_handle,
             music: music_sink,
-            _sound_effects: vec![],
+            // sfx_src: vec![Box::new(srx2)],
+            // sound_effects: vec![sfx1_sink],
             is_kill: false,
         }
     }
@@ -75,7 +76,18 @@ impl AudioSystem {
             AudioSysMsg::_SetEffectsVolume(_) => {}
             AudioSysMsg::_PlayMusic => {}
             AudioSysMsg::_StopMusic => {}
-            AudioSysMsg::_PlayEffect(_) => {}
+            AudioSysMsg::PlayEffect(id) => {
+                let src = rodio::Decoder::new(BufReader::new(std::io::Cursor::new(
+                    resources::EFFECT_BLIP,
+                )))
+                .unwrap(); // TODO: find out if a buffered source is useful at all
+
+                let sink = rodio::Sink::try_new(&self.stream_handle)
+                    .expect("could not create effect sink");
+                sink.set_volume(0.1);
+                sink.append(src);
+                sink.detach();
+            }
             AudioSysMsg::_StopEffect(_) => {}
             AudioSysMsg::_Kill => {
                 self.is_kill = true;
