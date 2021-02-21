@@ -6,7 +6,6 @@ use crate::systems::game::IO;
 use ir::ast;
 use ir::ast::LineChild::Span;
 use ir::ast::{Action, ChExpr, Instruction, LineChild, TextProperties};
-use std::str::Chars;
 use std::vec::IntoIter;
 
 #[derive(Debug)]
@@ -115,7 +114,6 @@ impl DialogueSystem {
             }
             Directive::None => {
                 self.next_directive();
-                println!("{:?}", self.directive)
             }
         }
     }

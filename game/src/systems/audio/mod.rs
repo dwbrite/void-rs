@@ -1,6 +1,11 @@
+// mod rodio_crud;
+
 use crate::resources;
-use rodio::{OutputStream, OutputStreamHandle, Sample, Source};
+// use crate::systems::audio::rodio_crud::Buffered;
+use rodio::source::Buffered;
+use rodio::{OutputStream, OutputStreamHandle, Source};
 use std::io::BufReader;
+use std::sync::Arc;
 
 pub enum AudioSysMsg {
     _SetMasterVolume(f32),
@@ -20,6 +25,7 @@ pub struct AudioSystem {
     _stream: OutputStream,
     stream_handle: OutputStreamHandle,
     music: rodio::Sink,
+    // xyz: Buffered<Box<dyn Source<Item = f32>>>,
     // sfx_src: Vec<Box<rodio::Decoder<u8>>>,
     // sound_effects: Vec<rodio::Sink>,
     is_kill: bool,
@@ -38,10 +44,18 @@ impl AudioSystem {
         let music_sink = rodio::Sink::try_new(&stream_handle).expect("could not create music sink");
         music_sink.append(music_source);
 
+        // let src = Box::new(
+        //     rodio::Decoder::new(BufReader::new(std::io::Cursor::new(resources::MUSIC)))
+        //         .unwrap()
+        //         .convert_samples(),
+        // );
+        // let bs = rodio_crud::buffered(src);
+
         Self {
             _stream,
-            stream_handle: stream_handle,
+            stream_handle,
             music: music_sink,
+            // xyz: bs,
             // sfx_src: vec![Box::new(srx2)],
             // sound_effects: vec![sfx1_sink],
             is_kill: false,
