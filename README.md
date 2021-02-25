@@ -2,6 +2,8 @@
 
 ## About
 
+A game originally started in 2015, rewritten in Rust to explore wgpu.
+
 "What do we do now?"
 
 ## Getting Started
