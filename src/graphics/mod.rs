@@ -1,7 +1,26 @@
 use futures::executor::block_on;
-use wgpu::{PresentMode, RequestAdapterOptions, SurfaceConfiguration, TextureUsages};
+use wgpu::{
+    PresentMode, RequestAdapterOptions, SurfaceConfiguration, TextureUsages, VertexBufferLayout,
+    VertexStepMode,
+};
 
 use winit::window::Window;
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct VertexData {
+    pub(crate) position: [f32; 3],
+}
+
+impl VertexData {
+    pub fn layout<'a>() -> VertexBufferLayout<'a> {
+        VertexBufferLayout {
+            array_stride: std::mem::size_of::<VertexData>() as wgpu::BufferAddress,
+            step_mode: VertexStepMode::Vertex,
+            attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+        }
+    }
+}
 
 pub struct GraphicsContext {
     pub window: winit::window::Window,
