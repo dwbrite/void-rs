@@ -2,12 +2,11 @@ mod graphics;
 mod systems;
 
 use crate::systems::game::{GameSystem, ShouldQuit};
-
 use winit::dpi::PhysicalSize;
-
 use winit::event_loop::{ControlFlow, EventLoop};
 
 fn main() {
+    env_logger::init();
     let event_loop = EventLoop::new();
 
     let title = "void";
