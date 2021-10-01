@@ -1,23 +1,18 @@
 mod object;
 
-use crate::graphics::sprite::Sprite;
 use crate::graphics::GraphicsContext;
 use crate::systems::controls::Controls;
 use crate::systems::game::object::Object::Scenery;
 use crate::systems::game::object::{Chunk, Expanse, Object, Position};
-use bytemuck::*;
-use std::collections::VecDeque;
-use std::mem::size_of;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
+
 use wgpu::{
     BindGroup, BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType,
-    BlendState, Buffer, BufferBindingType, BufferDescriptor, BufferUsages, Color, ColorTargetState,
-    ColorWrites, CommandEncoder, CommandEncoderDescriptor, Extent3d, Face, FragmentState,
-    IndexFormat, LoadOp, MultisampleState, PipelineLayoutDescriptor, PolygonMode, PrimitiveState,
-    PrimitiveTopology, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline,
-    RenderPipelineDescriptor, ShaderModule, ShaderModuleDescriptor, ShaderSource, SurfaceError,
-    SurfaceTexture, Texture, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureUsages, TextureView, TextureViewDescriptor, VertexState,
+    Buffer, BufferBindingType, BufferDescriptor, BufferUsages, Color, CommandEncoder,
+    CommandEncoderDescriptor, FragmentState, LoadOp, MultisampleState, PipelineLayoutDescriptor,
+    PolygonMode, PrimitiveState, PrimitiveTopology, RenderPassColorAttachment,
+    RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderModule,
+    ShaderModuleDescriptor, ShaderSource, SurfaceError, SurfaceTexture, Texture, TextureAspect,
+    TextureDescriptor, TextureDimension, TextureFormat, VertexState,
 };
 
 use rand::Rng;
@@ -34,22 +29,10 @@ pub struct IO {
 
 pub struct BufferTracker {
     pub obj_count: usize,
-    pub positions: PositionArr, // size 65536
-    pub uvs: UvArr,             // size 131072
-    pub sizes: SizeArr,         // size: 32768
+    pub positions: Vec<[u32; 2]>, // size 65536
+    pub uvs: Vec<[[f32; 2]; 4]>,  // size 131072
+    pub sizes: Vec<[u32; 2]>,     // size: 32768
 }
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, PartialEq, Pod, Zeroable)]
-pub struct PositionArr([[u32; 2]; 4096]);
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, PartialEq, Pod, Zeroable)]
-pub struct UvArr([[[f32; 2]; 4]; 4096]);
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, PartialEq, Pod, Zeroable)]
-pub struct SizeArr([[u32; 2]; 4096]);
 
 pub struct Compositor {
     pub tracker: BufferTracker,
@@ -74,15 +57,15 @@ impl Compositor {
 
         let tracker = BufferTracker {
             obj_count: 0,
-            positions: PositionArr([[0, 0]; 4096]),
-            uvs: UvArr([[[0., 0.]; 4]; 4096]),
-            sizes: SizeArr([[0, 0]; 4096]),
+            positions: Vec::with_capacity(4096),
+            uvs: Vec::with_capacity(4096),
+            sizes: Vec::with_capacity(4096),
         };
 
         let pos_buf = {
             gc.device.create_buffer(&BufferDescriptor {
                 label: Some("position buffer"),
-                size: std::mem::size_of::<PositionArr>() as u64, // this allows for 4096 objects on screen at a time
+                size: 8 * 4096, // this allows for 4096 objects on screen at a time
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
@@ -91,7 +74,7 @@ impl Compositor {
         let uv_buf = {
             gc.device.create_buffer(&BufferDescriptor {
                 label: Some("UV buffer"),
-                size: std::mem::size_of::<UvArr>() as u64,
+                size: 32 * 4096,
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
@@ -100,7 +83,7 @@ impl Compositor {
         let size_buf = {
             gc.device.create_buffer(&BufferDescriptor {
                 label: Some("size buffer"),
-                size: std::mem::size_of::<SizeArr>() as u64,
+                size: 8 * 4096,
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
@@ -291,16 +274,19 @@ impl Compositor {
         gc.queue.write_buffer(
             &self.pos_buf,
             0,
-            bytemuck::cast_slice(&[self.tracker.positions]),
+            bytemuck::cast_slice(self.tracker.positions.as_slice()),
         );
 
-        gc.queue
-            .write_buffer(&self.uv_buf, 0, bytemuck::cast_slice(&[self.tracker.uvs]));
+        gc.queue.write_buffer(
+            &self.uv_buf,
+            0,
+            bytemuck::cast_slice(self.tracker.uvs.as_slice()),
+        );
 
         gc.queue.write_buffer(
             &self.size_buf,
             0,
-            bytemuck::cast_slice(&[self.tracker.sizes]),
+            bytemuck::cast_slice(self.tracker.sizes.as_slice()),
         );
 
         render_pass.set_pipeline(&self.pipeline);
@@ -317,18 +303,19 @@ impl Compositor {
         // texture: usize,
     ) {
         let mut t = &mut self.tracker;
-        t.positions.0[t.obj_count] = [position.x, position.y];
-        t.sizes.0[t.obj_count] = size;
-        t.uvs.0[t.obj_count] = uv;
+        t.positions.push([position.x, position.y]);
+        t.sizes.push(size);
+        t.uvs.push(uv);
         t.obj_count += 1;
         // self.textures.push(texture);
     }
 
     pub fn reset(&mut self) {
         self.tracker.obj_count = 0;
-        self.tracker.positions.0 = [[0, 0]; 4096];
-        self.tracker.uvs.0 = [[[0., 0.]; 4]; 4096];
-        self.tracker.sizes.0 = [[0, 0]; 4096];
+        self.tracker.positions.clear();
+        self.tracker.sizes.clear();
+        self.tracker.uvs.clear();
+        // don't waste cpu time resetting items?
     }
 }
 
@@ -354,7 +341,7 @@ impl GameSystem {
 
         let mut objects = vec![];
         let mut rng = rand::thread_rng();
-        for idx in 0..4096 {
+        for _idx in 0..4096 {
             objects.push(Object::Scenery(object::Scenery {
                 texture: "resources/birb.png".to_string(),
                 uv: [[0.0, 0.0], [0.5, 0.0], [0.5, 0.5], [0.0, 0.5]],
@@ -382,9 +369,10 @@ impl GameSystem {
     }
 
     pub fn handle_events(&mut self, event: &Event<()>) -> ShouldQuit {
+        let has_events = self.io.controls.input_helper.update(event);
+
         // if events cleared
-        if self.io.controls.input_helper.update(event) {
-            // TODO: update and draw
+        if has_events {
             self.update();
             self.draw();
             self.render();
@@ -438,16 +426,14 @@ impl GameSystem {
         self.gc.queue.submit(std::iter::once(encoder.finish()));
     }
 
-    fn update(&self) {
-        // do nothing
-    }
+    fn update(&mut self) {}
 
     fn draw(&mut self) {
         self.compositor.reset();
         // for each loaded chunk (check camera position),
         // place each object
 
-        let mut loaded_chunks: Vec<Chunk> = self
+        let loaded_chunks: Vec<Chunk> = self
             .expanse
             .chunks
             .iter()

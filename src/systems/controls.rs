@@ -1,4 +1,3 @@
-
 use winit_input_helper::WinitInputHelper;
 
 pub struct Controls {

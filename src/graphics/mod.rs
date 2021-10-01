@@ -1,10 +1,7 @@
 pub(crate) mod sprite;
 
 use futures::executor::block_on;
-use wgpu::{
-    PresentMode, RequestAdapterOptions, SurfaceConfiguration, TextureUsages, VertexBufferLayout,
-    VertexStepMode,
-};
+use wgpu::{PresentMode, RequestAdapterOptions, SurfaceConfiguration, TextureUsages};
 
 use winit::window::Window;
 
@@ -47,7 +44,8 @@ impl GraphicsContext {
             format: surface.get_preferred_format(&adapter).unwrap(),
             width: size.width,
             height: size.height,
-            present_mode: PresentMode::Mailbox,
+            // just for performance testing
+            present_mode: PresentMode::Immediate,
         };
 
         surface.configure(&device, &config);

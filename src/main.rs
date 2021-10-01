@@ -19,7 +19,7 @@ fn main() {
     let mut state = GameSystem::new(window);
 
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
+        *control_flow = ControlFlow::Poll;
 
         if matches!(state.handle_events(&event), ShouldQuit::True) {
             *control_flow = ControlFlow::Exit
