@@ -5,7 +5,7 @@ fn main([[builtin(position)]] pos: vec4<f32>) -> [[location(0)]] vec4<f32> {
 
 [[block]]
 struct Position {
-    data: array<vec2<u32>, 64000>;
+    data: array<vec2<u32>, 200000>;
 };
 
 [[group(0), binding(0)]]
@@ -13,7 +13,7 @@ var<storage,read> buf1: Position;
 
 [[block]]
 struct UV {
-    data: array<mat2x4<f32>, 64000>;
+    data: array<mat2x4<f32>, 200000>;
 };
 
 [[group(0), binding(1)]]
@@ -21,7 +21,7 @@ var<storage,read> buf2: UV;
 
 [[block]]
 struct Size {
-    data: array<vec2<u32>, 64000>;
+    data: array<vec2<u32>, 200000>;
 };
 
 [[group(0), binding(2)]]

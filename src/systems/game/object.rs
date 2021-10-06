@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Position {
@@ -22,7 +24,7 @@ pub struct Scenery {
 
 #[derive(Debug, Clone)]
 pub struct Chunk {
-    pub objects: Vec<Object>,
+    pub objects: Rc<Vec<Object>>,
     pub size: [u32; 2],
     pub position: Position,
 }

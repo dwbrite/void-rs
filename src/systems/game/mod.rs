@@ -19,6 +19,7 @@ use rand::Rng;
 use wgpu::ShaderStages;
 use winit::event::Event;
 use winit::window::Window;
+use std::rc::Rc;
 
 pub struct IO {
     pub ticks: u64,
@@ -57,15 +58,15 @@ impl Compositor {
 
         let tracker = BufferTracker {
             obj_count: 0,
-            positions: Vec::with_capacity(64000),
-            uvs: Vec::with_capacity(64000),
-            sizes: Vec::with_capacity(64000),
+            positions: Vec::with_capacity(200000),
+            uvs: Vec::with_capacity(200000),
+            sizes: Vec::with_capacity(200000),
         };
 
         let pos_buf = {
             gc.device.create_buffer(&BufferDescriptor {
                 label: Some("position buffer"),
-                size: 8 * 64000, // this allows for 64000 objects on screen at a time
+                size: 8 * 200000, // this allows for 200000 objects on screen at a time
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
@@ -74,7 +75,7 @@ impl Compositor {
         let uv_buf = {
             gc.device.create_buffer(&BufferDescriptor {
                 label: Some("UV buffer"),
-                size: 32 * 64000,
+                size: 32 * 200000,
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
@@ -83,7 +84,7 @@ impl Compositor {
         let size_buf = {
             gc.device.create_buffer(&BufferDescriptor {
                 label: Some("size buffer"),
-                size: 8 * 64000,
+                size: 8 * 200000,
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
@@ -294,6 +295,7 @@ impl Compositor {
         render_pass.draw(0..(self.tracker.obj_count as u32 * 6), 0..1);
     }
 
+    #[inline(always)]
     pub fn add_object(
         &mut self,
         position: Position,
@@ -309,7 +311,7 @@ impl Compositor {
         // self.textures.push(texture);
     }
 
-    pub fn reset(&mut self) {
+    pub fn clear(&mut self) {
         self.tracker.obj_count = 0;
         self.tracker.positions.clear();
         self.tracker.sizes.clear();
@@ -340,7 +342,7 @@ impl GameSystem {
 
         let mut objects = vec![];
         let mut rng = rand::thread_rng();
-        for _idx in 0..64000 {
+        for _idx in 0..200000 {
             objects.push(Object::Scenery(object::Scenery {
                 texture: "resources/birb.png".to_string(),
                 uv: [[0.0, 0.0], [0.5, 0.0], [0.5, 0.5], [0.0, 0.5]],
@@ -357,7 +359,7 @@ impl GameSystem {
             io,
             expanse: Expanse {
                 chunks: vec![Chunk {
-                    objects,
+                    objects: Rc::new(objects),
                     size: [64, 64],
                     position: Position { x: 0, y: 0 },
                 }],
@@ -434,11 +436,12 @@ impl GameSystem {
 
     #[profiling::function]
     fn draw(&mut self) {
-        self.compositor.reset();
+        self.compositor.clear();
         // for each loaded chunk (check camera position),
         // place each object
 
-        let loaded_chunks: Vec<Chunk> = {
+        let loaded_chunks
+            : Vec<Chunk> = {
             profiling::scope!("Cull Chunks");
             self
                 .expanse
@@ -469,8 +472,8 @@ impl GameSystem {
 
         for chunk in loaded_chunks {
             profiling::scope!("for chunk in loaded_chunks");
-            for object in chunk.objects {
-                profiling::scope!("add objects to compositor");
+            for object in chunk.objects.iter() {
+                // profiling::scope!("add objects to compositor");
                 match object {
                     Scenery(o) => self.compositor.add_object(o.position, o.size, o.uv),
                     Object::Character => {}
