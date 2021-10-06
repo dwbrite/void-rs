@@ -5,17 +5,18 @@ edition = "2018"
 resolver="2"
 
 [dependencies]
-image = "0.23"
-wgpu = "0.10"
+image = "0.23.14"
+wgpu = { git = "https://github.com/gfx-rs/wgpu"}
 winit = { version = "0.25.0" }
 tokio = "1.12"
 log = "0.4"
 env_logger = "0.7"
 cgmath = "0.18"
 futures = "0.3.17"
-wgpu_glyph = "0.14.1"
+#wgpu_glyph = "0.14.1"
 egui = "0.14.2"
 winit_input_helper = "0.10"
 crossbeam-channel = "0.5.1"
 rand = "0.8.4"
 bytemuck = { version = "1.7.2", features = ["derive"] }
+profiling = { version = "1.0.3", features = ["profile-with-tracy"] }

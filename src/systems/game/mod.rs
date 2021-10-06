@@ -57,15 +57,15 @@ impl Compositor {
 
         let tracker = BufferTracker {
             obj_count: 0,
-            positions: Vec::with_capacity(4096),
-            uvs: Vec::with_capacity(4096),
-            sizes: Vec::with_capacity(4096),
+            positions: Vec::with_capacity(64000),
+            uvs: Vec::with_capacity(64000),
+            sizes: Vec::with_capacity(64000),
         };
 
         let pos_buf = {
             gc.device.create_buffer(&BufferDescriptor {
                 label: Some("position buffer"),
-                size: 8 * 4096, // this allows for 4096 objects on screen at a time
+                size: 8 * 64000, // this allows for 64000 objects on screen at a time
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
@@ -74,7 +74,7 @@ impl Compositor {
         let uv_buf = {
             gc.device.create_buffer(&BufferDescriptor {
                 label: Some("UV buffer"),
-                size: 32 * 4096,
+                size: 32 * 64000,
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
@@ -83,7 +83,7 @@ impl Compositor {
         let size_buf = {
             gc.device.create_buffer(&BufferDescriptor {
                 label: Some("size buffer"),
-                size: 8 * 4096,
+                size: 8 * 64000,
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
@@ -291,7 +291,6 @@ impl Compositor {
 
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
-        // render_pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
         render_pass.draw(0..(self.tracker.obj_count as u32 * 6), 0..1);
     }
 
@@ -341,7 +340,7 @@ impl GameSystem {
 
         let mut objects = vec![];
         let mut rng = rand::thread_rng();
-        for _idx in 0..4096 {
+        for _idx in 0..64000 {
             objects.push(Object::Scenery(object::Scenery {
                 texture: "resources/birb.png".to_string(),
                 uv: [[0.0, 0.0], [0.5, 0.0], [0.5, 0.5], [0.0, 0.5]],
@@ -368,14 +367,17 @@ impl GameSystem {
         }
     }
 
+    #[profiling::function]
     pub fn handle_events(&mut self, event: &Event<()>) -> ShouldQuit {
         let has_events = self.io.controls.input_helper.update(event);
 
         // if events cleared
         if has_events {
+            profiling::scope!("Main Thread");
             self.update();
             self.draw();
             self.render();
+            profiling::finish_frame!();
         }
 
         let input_helper = &mut self.io.controls.input_helper;
@@ -391,6 +393,7 @@ impl GameSystem {
         }
     }
 
+    #[profiling::function]
     fn render(&mut self) {
         let frame_tex = {
             let frame = self.gc.surface.get_current_frame();
@@ -426,41 +429,48 @@ impl GameSystem {
         self.gc.queue.submit(std::iter::once(encoder.finish()));
     }
 
+    #[profiling::function]
     fn update(&mut self) {}
 
+    #[profiling::function]
     fn draw(&mut self) {
         self.compositor.reset();
         // for each loaded chunk (check camera position),
         // place each object
 
-        let loaded_chunks: Vec<Chunk> = self
-            .expanse
-            .chunks
-            .iter()
-            .filter(|chunk| {
-                // TODO: bounds check better
-                let test = chunk.position.x;
-                let starts_in_cam_x = test >= self.camera.x && test <= self.camera.x + 640;
-                let test = chunk.position.x + (chunk.size[0]);
-                let ends_in_cam_x = test >= self.camera.x && test <= self.camera.x + 640;
+        let loaded_chunks: Vec<Chunk> = {
+            profiling::scope!("Cull Chunks");
+            self
+                .expanse
+                .chunks
+                .iter()
+                .filter(|chunk| {
+                    // TODO: bounds check better
+                    let test = chunk.position.x;
+                    let starts_in_cam_x = test >= self.camera.x && test <= self.camera.x + 640;
+                    let test = chunk.position.x + (chunk.size[0]);
+                    let ends_in_cam_x = test >= self.camera.x && test <= self.camera.x + 640;
 
-                let test = chunk.position.y;
-                let starts_in_cam_y = test >= self.camera.y && test <= self.camera.y + 360;
-                let test = chunk.position.y + (chunk.size[1]);
-                let ends_in_cam_y = test >= self.camera.y && test <= self.camera.y + 360;
+                    let test = chunk.position.y;
+                    let starts_in_cam_y = test >= self.camera.y && test <= self.camera.y + 360;
+                    let test = chunk.position.y + (chunk.size[1]);
+                    let ends_in_cam_y = test >= self.camera.y && test <= self.camera.y + 360;
 
-                starts_in_cam_x || starts_in_cam_y || ends_in_cam_x || ends_in_cam_y
-            })
-            .map(|chunk| {
-                let mut chunk = chunk.clone();
-                chunk.position.x -= self.camera.x;
-                chunk.position.y -= self.camera.y;
-                chunk
-            })
-            .collect();
+                    starts_in_cam_x || starts_in_cam_y || ends_in_cam_x || ends_in_cam_y
+                })
+                .map(|chunk| {
+                    let mut chunk = chunk.clone();
+                    chunk.position.x -= self.camera.x;
+                    chunk.position.y -= self.camera.y;
+                    chunk
+                })
+                .collect()
+        };
 
         for chunk in loaded_chunks {
+            profiling::scope!("for chunk in loaded_chunks");
             for object in chunk.objects {
+                profiling::scope!("add objects to compositor");
                 match object {
                     Scenery(o) => self.compositor.add_object(o.position, o.size, o.uv),
                     Object::Character => {}

@@ -6,6 +6,7 @@ use winit::dpi::PhysicalSize;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 fn main() {
+    profiling::register_thread!("Main Thread");
     env_logger::init();
     let event_loop = EventLoop::new();
 

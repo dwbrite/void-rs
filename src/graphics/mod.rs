@@ -1,5 +1,3 @@
-pub(crate) mod sprite;
-
 use futures::executor::block_on;
 use wgpu::{PresentMode, RequestAdapterOptions, SurfaceConfiguration, TextureUsages};
 
@@ -25,6 +23,7 @@ impl GraphicsContext {
         // TODO: hey asshole, fix this later - we need to know if a given adapter will be supported.
         let adapter = block_on(instance.request_adapter(&RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
+            force_fallback_adapter: false,
             compatible_surface: Some(&surface),
         }))
         .unwrap();
