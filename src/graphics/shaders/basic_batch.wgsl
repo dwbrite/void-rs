@@ -3,41 +3,31 @@ fn main([[builtin(position)]] pos: vec4<f32>) -> [[location(0)]] vec4<f32> {
     return vec4<f32>(1.0, 1.0, 1.0, 1.0);
 }
 
+struct Object {
+    pos: vec2<u32>;
+    size: vec2<u32>;
+    uv: mat2x4<f32>;
+};
+
 [[block]]
-struct Position {
-    data: array<vec2<u32>, 200000>;
+struct ObjList {
+    data: array<Object, 500000>;
 };
 
 [[group(0), binding(0)]]
-var<storage,read> buf1: Position;
-
-[[block]]
-struct UV {
-    data: array<mat2x4<f32>, 200000>;
-};
-
-[[group(0), binding(1)]]
-var<storage,read> buf2: UV;
-
-[[block]]
-struct Size {
-    data: array<vec2<u32>, 200000>;
-};
-
-[[group(0), binding(2)]]
-var<storage,read> buf3: Size;
-
+var<storage,read> objects: ObjList;
 
 [[stage(vertex)]]
 fn vert_main([[builtin(vertex_index)]] vert_idx: u32) -> [[builtin(position)]] vec4<f32> {
     let obj_idx = u32(floor(f32(vert_idx) / 6.0));
     let rel_idx = vert_idx % 6u;
 
-    let pos = buf1.data[obj_idx];
+    let obj = objects.data[obj_idx];
+
+    let pos = obj.pos;
+    let size = obj.size;
+
     var vertex = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-
-    let size = buf3.data[obj_idx];
-
 
     if (rel_idx == 0u || rel_idx == 3u ) {
         vertex.x = f32(pos.x + size.x);

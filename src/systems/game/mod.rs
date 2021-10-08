@@ -20,6 +20,8 @@ use wgpu::ShaderStages;
 use winit::event::Event;
 use winit::window::Window;
 use std::rc::Rc;
+use rayon::prelude::*;
+use rayon::iter::{ParallelIterator, ParallelExtend};
 
 pub struct IO {
     pub ticks: u64,
@@ -28,20 +30,19 @@ pub struct IO {
     // pub draw_queue: VecDeque<DrawCommand>,
 }
 
-pub struct BufferTracker {
-    pub obj_count: usize,
-    pub positions: Vec<[u32; 2]>, // size 65536
-    pub uvs: Vec<[[f32; 2]; 4]>,  // size 131072
-    pub sizes: Vec<[u32; 2]>,     // size: 32768
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
+pub struct Obj {
+    pos: [u32;2],
+    size: [u32;2],
+    uv: [[f32;2];4],
 }
 
 pub struct Compositor {
-    pub tracker: BufferTracker,
+    tracker: Vec<Obj>,
     shader: ShaderModule,
     pipeline: RenderPipeline,
-    pos_buf: Buffer,
-    uv_buf: Buffer,
-    size_buf: Buffer,
+    data_buf: Buffer,
     tex_buf: Texture,
     bind_group_layout: BindGroupLayout,
     bind_group: BindGroup,
@@ -56,35 +57,10 @@ impl Compositor {
             ),
         });
 
-        let tracker = BufferTracker {
-            obj_count: 0,
-            positions: Vec::with_capacity(200000),
-            uvs: Vec::with_capacity(200000),
-            sizes: Vec::with_capacity(200000),
-        };
-
-        let pos_buf = {
+        let data_buf = {
             gc.device.create_buffer(&BufferDescriptor {
-                label: Some("position buffer"),
-                size: 8 * 200000, // this allows for 200000 objects on screen at a time
-                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            })
-        };
-
-        let uv_buf = {
-            gc.device.create_buffer(&BufferDescriptor {
-                label: Some("UV buffer"),
-                size: 32 * 200000,
-                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            })
-        };
-
-        let size_buf = {
-            gc.device.create_buffer(&BufferDescriptor {
-                label: Some("size buffer"),
-                size: 8 * 200000,
+                label: Some("object buffer"),
+                size: 48 * 500000, // this allows for 500000 objects on screen at a time
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
@@ -152,28 +128,6 @@ impl Compositor {
                         },
                         count: None,
                     },
-                    // uv
-                    BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Buffer {
-                            ty: BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    // size
-                    BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: ShaderStages::VERTEX,
-                        ty: BindingType::Buffer {
-                            ty: BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
                 ],
             });
 
@@ -182,15 +136,7 @@ impl Compositor {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: pos_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: uv_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: size_buf.as_entire_binding(),
+                    resource: data_buf.as_entire_binding(),
                 },
             ],
             label: Some("bla bla data bind group"),
@@ -235,12 +181,10 @@ impl Compositor {
         };
 
         Self {
-            tracker,
+            tracker: Vec::with_capacity(500000),
             shader,
             pipeline,
-            pos_buf,
-            uv_buf,
-            size_buf,
+            data_buf,
             tex_buf,
             bind_group_layout,
             bind_group,
@@ -273,50 +217,18 @@ impl Compositor {
 
         // TODO: upload data to buffers
         gc.queue.write_buffer(
-            &self.pos_buf,
+            &self.data_buf,
             0,
-            bytemuck::cast_slice(self.tracker.positions.as_slice()),
-        );
-
-        gc.queue.write_buffer(
-            &self.uv_buf,
-            0,
-            bytemuck::cast_slice(self.tracker.uvs.as_slice()),
-        );
-
-        gc.queue.write_buffer(
-            &self.size_buf,
-            0,
-            bytemuck::cast_slice(self.tracker.sizes.as_slice()),
+            bytemuck::cast_slice(&self.tracker),
         );
 
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
-        render_pass.draw(0..(self.tracker.obj_count as u32 * 6), 0..1);
-    }
-
-    #[inline(always)]
-    pub fn add_object(
-        &mut self,
-        position: Position,
-        size: [u32; 2],
-        uv: [[f32; 2]; 4],
-        // texture: usize,
-    ) {
-        let mut t = &mut self.tracker;
-        t.positions.push([position.x, position.y]);
-        t.sizes.push(size);
-        t.uvs.push(uv);
-        t.obj_count += 1;
-        // self.textures.push(texture);
+        render_pass.draw(0..(self.tracker.len() as u32 * 6), 0..1);
     }
 
     pub fn clear(&mut self) {
-        self.tracker.obj_count = 0;
-        self.tracker.positions.clear();
-        self.tracker.sizes.clear();
-        self.tracker.uvs.clear();
-        // don't waste cpu time resetting items?
+        self.tracker.clear();
     }
 }
 
@@ -342,7 +254,7 @@ impl GameSystem {
 
         let mut objects = vec![];
         let mut rng = rand::thread_rng();
-        for _idx in 0..200000 {
+        for _idx in 0..500000 {
             objects.push(Object::Scenery(object::Scenery {
                 texture: "resources/birb.png".to_string(),
                 uv: [[0.0, 0.0], [0.5, 0.0], [0.5, 0.5], [0.0, 0.5]],
@@ -398,7 +310,7 @@ impl GameSystem {
     #[profiling::function]
     fn render(&mut self) {
         let frame_tex = {
-            let frame = self.gc.surface.get_current_frame();
+            let frame = self.gc.surface.get_current_texture();
 
             match frame {
                 Ok(_f) => _f,
@@ -406,7 +318,7 @@ impl GameSystem {
                     self.gc.surface.configure(&self.gc.device, &self.gc.config);
                     self.gc
                         .surface
-                        .get_current_frame()
+                        .get_current_texture()
                         .expect("swapchain failed to get current frame (twice)")
                 }
                 Err(SurfaceError::Timeout) => {
@@ -414,8 +326,7 @@ impl GameSystem {
                 }
                 _ => frame.expect("swapchain failed to get current frame"),
             }
-        }
-        .output;
+        };
 
         let mut encoder = {
             self.gc
@@ -429,6 +340,7 @@ impl GameSystem {
             .render(&mut self.gc, &mut encoder, &frame_tex);
 
         self.gc.queue.submit(std::iter::once(encoder.finish()));
+        frame_tex.present();
     }
 
     #[profiling::function]
@@ -472,13 +384,20 @@ impl GameSystem {
 
         for chunk in loaded_chunks {
             profiling::scope!("for chunk in loaded_chunks");
-            for object in chunk.objects.iter() {
-                // profiling::scope!("add objects to compositor");
+            self.compositor.tracker.par_extend(chunk.objects.par_iter().map(|object| {
                 match object {
-                    Scenery(o) => self.compositor.add_object(o.position, o.size, o.uv),
-                    Object::Character => {}
+                    Object::Scenery(o) => Obj {
+                        pos: [o.position.x, o.position.y],
+                        size: o.size,
+                        uv: o.uv
+                    },
+                    Object::Character => Obj {
+                        pos: [0, 0],
+                        size: [0, 0],
+                        uv: [[0., 0.], [0., 0.], [0., 0.], [0., 0.]]
+                    }
                 }
-            }
+            }));
         }
     }
 }
