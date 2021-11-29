@@ -31,7 +31,7 @@ impl GraphicsContext {
         let (device, queue) = block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 features: wgpu::Features::empty(),
-                limits: wgpu::Limits::downlevel_defaults(), // so we can run on webgl
+                limits: wgpu::Limits::downlevel_defaults(),
                 label: None,
             },
             None, // Trace path

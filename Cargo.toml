@@ -6,7 +6,8 @@ resolver="2"
 
 [dependencies]
 image = "0.23.14"
-wgpu = { git = "https://github.com/gfx-rs/wgpu"}
+wgpu = "0.11"
+hecs = "0.7.0"
 winit = { version = "0.25.0" }
 tokio = "1.12"
 log = "0.4"
