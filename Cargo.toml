@@ -6,3 +6,4 @@
 [workspace]
 default-members = ["game"]
 members = ["game", "ir", "ir-parser"]
+resolver = "3"
