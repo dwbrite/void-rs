@@ -3,25 +3,20 @@ use bevy::input::{ButtonInput, InputPlugin};
 use bevy::input::gamepad::GamepadEvent;
 use bevy::math::Vec2;
 use bevy::prelude::*;
+use bevy_rapier2d::prelude::{ActiveEvents, Collider, CollisionEvent, Damping, ExternalImpulse, LockedAxes, RigidBody, Velocity};
 use crate::{AnimationIndices, AnimationTimer, PIXEL_PERFECT_LAYERS};
 
 const COYOTE_FRAMES: u32 = 6;
 const AIR_JUMP_DURATION: u32 = 2;      // frames before transitioning to ControlledFall
-const AIR_JUMP_IMPULSE: f32 = 0.8;      // base upward impulse on frame 0
+const AIR_JUMP_IMPULSE: f32 = 200.0;      // base upward impulse on frame 0
 const AIR_JUMP_DI_STRENGTH: f32 = 0.8;  // how much stick influences the impulse direction
 const AIR_FRICTION: f32 = 0.92;         // horizontal velocity multiplier per tick
-const AIR_SPEED: f32 = 0.08;            // horizontal air acceleration
-const AIR_JUMP_BASE_IMPULSE: f32 = 0.8;
-const AIR_JUMP_IMPULSE_DECAY: f32 = 0.15; // each jump is this much weaker
+const AIR_SPEED: f32 = 8.;            // horizontal air acceleration
+const AIR_JUMP_BASE_IMPULSE: f32 = 100.;
+const AIR_JUMP_IMPULSE_DECAY: f32 = 0.05; // each jump is this much weaker
 const AIR_JUMP_DI_UP_STRENGTH: f32 = 0.1;   // nerfed upward DI
 const AIR_JUMP_DI_DOWN_STRENGTH: f32 = 0.8; // full downward DI kept
 const AIR_JUMP_DI_HORIZ_STRENGTH: f32 = 0.3;
-
-const GRAVITY: f32 = -0.015;
-
-
-#[derive(Component, Debug)]
-pub struct Velocity(Vec2);
 
 #[derive(Component)]
 pub struct PlayerGamepad;
@@ -84,27 +79,7 @@ pub enum AirborneState {
 #[derive(Component)]
 pub struct AirJumpsRemaining(pub u32);
 
-#[derive(Bundle)]
-pub struct PlayerBundle {
-    player_gamepad: PlayerGamepad,
-    player_state: PlayerState,
-    airborne_state: AirborneState,
-    player_action: PlayerAction,
-    state_ticks: StateTicks,
-    position: Transform,
-    velocity: Velocity,
-    sprite: Sprite,
-    pub animation_indices: AnimationIndices,
-    pub animation_timer: AnimationTimer,
-    render_layers: RenderLayers,
-    pub raw_input: RawInput,
-    air_jumps: AirJumpsRemaining,
-}
-
 pub struct PlayerPlugin;
-
-#[derive(Resource)]
-pub struct Gravity(pub f32);
 
 fn reset_air_jumps(mut query: Query<(&AirborneState, &mut AirJumpsRemaining), Changed<AirborneState>>) {
     for (state, mut jumps) in &mut query {
@@ -116,22 +91,46 @@ fn reset_air_jumps(mut query: Query<(&AirborneState, &mut AirJumpsRemaining), Ch
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Gravity(GRAVITY));
         app.add_systems(Startup, setup_player);
         app.add_systems(Update, buffer_jump_input);
         app.insert_resource(InputBuffer {
             jump_buffered: false,
         });
         app.add_systems(FixedUpdate, (
-            read_raw_input,          // 1. sample controller state
-            update_playerstate,      // 2. state transitions (uses raw_input)
+            read_raw_input,
+            detect_ground,
+            update_playerstate,
+            changed_state_debug,
             reset_air_jumps,
             reset_state_ticks,       // 3. reset ticks on any state that just changed
             update_playerstate_physics, // 4. physics decisions (reads state_ticks.0, wants 0 on transition frame)
-            apply_gravity,           // 5. gravity accumulation
-            apply_velocity,          // 6. integrate velocity into position
             increment_state_ticks,   // 7. increment last so next frame sees the right count
         ).chain());
+    }
+}
+
+pub fn detect_ground(
+    mut collision_events: MessageReader<CollisionEvent>,
+    mut player_query: Query<&mut AirborneState, With<PlayerGamepad>>,
+) {
+    for event in collision_events.read() {
+        match event {
+            CollisionEvent::Started(e1, e2, _) => {
+                println!("ur grounded");
+                if let Ok(mut airborne) = player_query.get_mut(*e1) {
+                    *airborne = AirborneState::Grounded;
+                } else if let Ok(mut airborne) = player_query.get_mut(*e2) {
+                    *airborne = AirborneState::Grounded;
+                }
+            }
+            CollisionEvent::Stopped(e1, e2, _) => {
+                if let Ok(mut airborne) = player_query.get_mut(*e1) {
+                    *airborne = AirborneState::Airborne;
+                } else if let Ok(mut airborne) = player_query.get_mut(*e2) {
+                    *airborne = AirborneState::Airborne;
+                }
+            }
+        }
     }
 }
 
@@ -140,58 +139,45 @@ pub fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>, mut 
     let texture_atlas_layout = texture_atlas_layouts.add(layout);
     let animation_indices = AnimationIndices { first: 0, last: 8 };
 
+    World::new();
 
     println!("spawning player bundle?");
-    commands.spawn(PlayerBundle {
-        player_gamepad: PlayerGamepad,
-        player_state: PlayerState::Idle,
-        airborne_state: AirborneState::Grounded,
-        player_action: PlayerAction::None,
-        state_ticks: StateTicks(0),
-        position: Transform::from_xyz(0.0, 0.0, 0.0),
-        velocity: Velocity(Vec2::ZERO),
-        sprite: Sprite::from_atlas_image(asset_server.load("gamer.png"), TextureAtlas {
+    commands.spawn((
+        PlayerGamepad,
+        PlayerState::Idle,
+        AirborneState::Grounded,
+        PlayerAction::None,
+        StateTicks(0),
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        Sprite::from_atlas_image(asset_server.load("gamer.png"), TextureAtlas {
             layout: texture_atlas_layout,
             index: animation_indices.first,
         }),
         animation_indices,
-        animation_timer: AnimationTimer(Timer::from_seconds(0.080, TimerMode::Repeating)),
-        raw_input: RawInput {
+        AnimationTimer(Timer::from_seconds(0.080, TimerMode::Repeating)),
+        RawInput {
             stick: Vec2 { x: 0.0, y: 0.0 },
             jump_held: false,
             jump_pressed: false,
         },
-        render_layers: PIXEL_PERFECT_LAYERS,
-        air_jumps: AirJumpsRemaining(5),
-    });
+        PIXEL_PERFECT_LAYERS,
+        AirJumpsRemaining(5),
+        Collider::cuboid(4., 4.),
+        RigidBody::Dynamic,
+        ExternalImpulse::default(),
+    )).insert((
+        Velocity::zero(),
+        ActiveEvents::COLLISION_EVENTS,
+        LockedAxes::ROTATION_LOCKED,
+    ));
 }
-
-pub fn apply_gravity(mut query: Query<&mut Velocity>, gravity: Res<Gravity>) {
-    for mut velocity in query {
-        velocity.0.y += gravity.0;
-    }
-
-}
-
-pub fn apply_velocity(mut query: Query<(&mut Transform, &Velocity)>) {
-    for (mut transform, velocity) in &mut query {
-        transform.translation.x += velocity.0.x;
-        transform.translation.y += velocity.0.y;
-
-        // todo: removeme
-        // temporary floor at y=0
-        if transform.translation.y < -60.0 {
-            transform.translation.y = -60.0;
-        }
-    }
-}
-
 
 pub fn update_playerstate(
     mut query: Query<(&mut PlayerState, &mut PlayerAction, &RawInput, &mut AirJumpsRemaining)>,
 ) {
     for (mut playerstate, mut playeraction, raw_input, mut air_jumps) in &mut query {
         *playeraction = if raw_input.jump_pressed {
+            println!("pressed jump");
             PlayerAction::Jump
         } else {
             PlayerAction::None
@@ -203,11 +189,21 @@ pub fn update_playerstate(
             },
             (PlayerState::Jumping | PlayerState::ControlledFall, PlayerAction::Jump)
             if air_jumps.0 > 0 => {
+                println!("air jumping");
                 air_jumps.0 -= 1;
                 *playerstate = PlayerState::AirJump;
+            },
+            (state, PlayerAction::Jump) => {
+                println!("jump blocked in state: {:?}, air_jumps: {}", state, air_jumps.0);
             }
             _ => {}
         }
+    }
+}
+
+pub fn changed_state_debug(query: Query<&PlayerState, Changed<PlayerState>>) {
+    for s in query {
+        println!("changed state: {:?}", s);
     }
 }
 
@@ -228,26 +224,39 @@ fn increment_state_ticks(mut query: Query<&mut StateTicks>) {
     }
 }
 
-pub fn update_playerstate_physics(mut query: Query<(&mut Velocity, &mut PlayerState, &StateTicks, &RawInput)>, gravity: Res<Gravity>) {
-    for (mut velocity, mut state, state_ticks, raw_input) in &mut query {
+pub fn update_playerstate_physics(mut query: Query<(&mut PlayerState, &StateTicks, &RawInput, &AirJumpsRemaining, &mut Velocity, &mut ExternalImpulse)>) {
+    for (mut state, state_ticks, raw_input, air_jumps, mut velocity, mut impulse) in &mut query {
         match &*state {
             PlayerState::Jumping | PlayerState::ControlledFall => {
                 // air friction + directional control
-                velocity.0.x *= AIR_FRICTION;
-                velocity.0.x += raw_input.stick.x * AIR_SPEED;
+                velocity.linear.x *= AIR_FRICTION;
+                velocity.linear.x += raw_input.stick.x * AIR_SPEED;
             }
 
             PlayerState::AirJump => {
                 // Frame 0: apply impulse with DI influence
                 if state_ticks.0 == 0 {
-                    let di = raw_input.stick * AIR_JUMP_DI_STRENGTH;
-                    velocity.0.y = AIR_JUMP_IMPULSE + di.y.max(0.0); // DI can boost but not reduce upward
-                    velocity.0.x = velocity.0.x * 0.5 + di.x;        // DI blends with existing momentum
+                    // jumps_remaining goes 4→0 as you use them, so jumps_used = 5 - remaining
+                    let jumps_used = (5 - air_jumps.0) as f32; // need AirJumpsRemaining in query
+                    let impulse = (AIR_JUMP_BASE_IMPULSE - jumps_used * AIR_JUMP_IMPULSE_DECAY).max(9.0);
+
+                    let di = raw_input.stick;
+                    let vertical_di = if di.y > 0.0 {
+                        di.y * AIR_JUMP_DI_UP_STRENGTH    // nerfed upward
+                    } else {
+                        di.y * AIR_JUMP_DI_DOWN_STRENGTH   // full downward
+                    };
+
+                    println!("doing an air jump!!!");
+
+                    // velocity.linear.y = impulse + vertical_di.max(-impulse * 0.8); // down DI can't fully cancel jump
+                    velocity.linear.y = AIR_JUMP_BASE_IMPULSE;
+                    velocity.linear.x = velocity.linear.x * 0.5 + di.x * AIR_JUMP_DI_HORIZ_STRENGTH;
                 }
 
                 // Air friction during jump too
-                velocity.0.x *= AIR_FRICTION;
-                velocity.0.x += raw_input.stick.x * AIR_SPEED;
+                velocity.linear.x *= AIR_FRICTION;
+                velocity.linear.x += raw_input.stick.x * AIR_SPEED;
 
                 // Transition to ControlledFall after duration expires
                 if state_ticks.0 >= AIR_JUMP_DURATION {

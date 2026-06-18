@@ -16,9 +16,9 @@ opt-level = 3
 
 
 [dependencies]
-bevy = { version = "0.19.0-rc.2", default-features = false, features = ["2d", "bevy_dev_tools", "bevy_ui_debug", "ui", "gamepad"] }
+bevy = { version = "0.18.1", default-features = false, features = ["2d", "bevy_dev_tools", "bevy_ui_debug", "ui", "gamepad"] }
 thread-priority = "3.0.0"
-
+bevy_rapier2d = { version = "*", features = [ "simd-stable", "debug-render-2d" ] }
 
 ir = { path = "../ir" }
 

@@ -67,21 +67,17 @@ enum PlayerMovement {
 
 use bevy::prelude::*;
 use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig};
-use thread_priority::*;
+use bevy_rapier2d::na::DimAdd;
+use bevy_rapier2d::prelude::*;
 use crate::input::PlayerPlugin;
 
 fn main() {
-    // Elevate the main thread's priority before Bevy takes over
-    if let Err(e) = set_current_thread_priority(ThreadPriority::Max) {
-        println!("Failed to set thread priority: {:?}", e);
-    }
-
     App::new()
         .add_plugins((DefaultPlugins.set(ImagePlugin::default_nearest()), FpsOverlayPlugin {
             config: FpsOverlayConfig {
                 text_config: TextFont {
                     // Here we define size of our overlay
-                    font_size: FontSize::Px(12.0),
+                    font_size: 12.0,
                     // If we want, we can use a custom font
                     font: default(),
                     ..default()
@@ -101,37 +97,23 @@ fn main() {
             },
         },
         ))
+        .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(16.0))
+        .add_plugins(RapierDebugRenderPlugin::default())
         .add_plugins(PlayerPlugin)
         .insert_resource(Time::<Fixed>::from_hz(128.0))
-        .add_systems(Startup, (setup_camera, setup_sprite))
+        .add_systems(Startup, (setup_camera, setup_movement_demo))
         .add_systems(Update, (fit_canvas, animate_sprite))
         .run();
 }
 
-fn setup_sprite(mut commands: Commands, asset_server: Res<AssetServer>, mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>) {
-    let layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 4, 3, None, None);
-    let texture_atlas_layout = texture_atlas_layouts.add(layout);
-    let animation_indices = AnimationIndices { first: 0, last: 8 };
-
-
-    // The sample sprite that will be rendered to the pixel-perfect canvas
-    commands.spawn((
-        Sprite::from_atlas_image(asset_server.load("gamer.png"), TextureAtlas {
-            layout: texture_atlas_layout,
-            index: animation_indices.first,
-        }),
-        Transform::from_xyz(-45., 20., 2.),
-        animation_indices,
-        AnimationTimer(Timer::from_seconds(0.080, TimerMode::Repeating)),
-        PIXEL_PERFECT_LAYERS,
-    ));
-}
-
 fn setup_movement_demo(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<ColorMaterial>>) {
     commands.spawn((
-        Mesh2d(meshes.add(Rectangle::new(640.0, 160.0))),
-        MeshMaterial2d(materials.add(Color::srgb(0.49, 0.2, 0.1))),
-        Transform::from_xyz(0.0, -99.0, 0.0),
+        PIXEL_PERFECT_LAYERS,
+        Transform::from_xyz(0.0, -119., 0.0),
+        Mesh2d(meshes.add(Rectangle::new(640.0, 120.0))),
+        MeshMaterial2d(materials.add(Color::srgb(0.075, 0.06, 0.13))),
+        Collider::cuboid(320.0, 40.0),
+        RigidBody::Fixed,
     ));
 }
 
