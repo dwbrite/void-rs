@@ -20,5 +20,5 @@ pub fn air_jump_phys(mut state: &PlayerState, state_ticks: &StateTicks, raw_inpu
         velocity.linear.x = velocity.linear.x * 0.5 + di.x * AIR_JUMP_DI_HORIZ_STRENGTH;
     }
 
-    crate::player::state::physics::aerial_movement(&raw_input, &mut velocity);
+    crate::player::state::physics::aerial_movement(&raw_input, &mut velocity, (1.0, 1.0));
 }

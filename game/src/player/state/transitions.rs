@@ -70,7 +70,7 @@ pub fn update_playerstate(
             // special case for our special boy :^)
             (ChargedPunch, _) => {
                 if !status.busy && (velocity.linear.y < -30.0 || airborne == &Grounded) {
-                    *playerstate = ControlledFall;
+                    *playerstate = ControlledAirborne;
                 }
             },
             // another special case~
@@ -79,8 +79,8 @@ pub fn update_playerstate(
             },
 
             // attacks/animations that are complete upon animation completion
-            (UpAir | DownAir | FwdAir | BackAir | NeutralAir, PlayerAction::None) if finished.contains(&entity) => {
-                *playerstate = ControlledFall;
+            (UpAir | DownAir | FwdAir | BackAir | NeutralAir | Jumping, PlayerAction::None) if finished.contains(&entity) => {
+                *playerstate = ControlledAirborne;
             },
 
             // jump
@@ -92,11 +92,17 @@ pub fn update_playerstate(
                     change_facing(raw_input, &mut facing);
                 } else if *airborne == Grounded {
                     *playerstate = Jumping;
+                    change_facing(raw_input, &mut facing);
                 }
             },
             // jump debug
             (state, PlayerAction::Jump) => {
                 println!("jump blocked in state: {:?}, air_jumps: {}", state, air_jumps.0);
+            },
+
+            // once initial jump lock ends, hand over to fully controllable airborne state
+            (Jumping | AirJump, PlayerAction::None) if *airborne == Airborne && !status.busy => {
+                *playerstate = ControlledAirborne;
             },
 
             (_, PlayerAction::None) if !status.busy && *airborne == Grounded => {
@@ -160,8 +166,8 @@ pub fn update_playerstate(
                     AtkDirection::Neutral => { Roll }
                 }
             }
-            _ if *airborne == Grounded => *playerstate = Idle,
-            // _ if *airborne == Airborne && velocity.linear.y <= 0.0 => *playerstate = ControlledFall,
+            _ if *airborne == Grounded && !status.busy => *playerstate = Idle,
+            _ if *airborne == Airborne && !status.busy => *playerstate = ControlledAirborne,
             _ => {}
         }
 
@@ -182,7 +188,7 @@ fn change_facing(raw_input: &RawInput, facing: &mut Facing) {
 pub fn reset_state_ticks(mut query: Query<(&mut StateTicks, &PreviousState, &PlayerState), Changed<PlayerState>>) {
     for (mut ticks, prestate, state) in &mut query {
         if prestate.0 != *state {
-            // println!("reset state tick: {:?}, state: {:?} -> {:?}", ticks, prestate.0, state);
+            println!("reset state tick: {:?}, state: {:?} -> {:?}", ticks, prestate.0, state);
             ticks.0 = 0;
         }
     }

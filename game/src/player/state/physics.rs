@@ -13,6 +13,15 @@ use PlayerState::*;
 
 pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &RawInput, &AirJumpsRemaining, &Facing, &mut Velocity, &mut CharacterStatus)>) {
     for (mut state, state_ticks, raw_input, air_jumps, facing, mut velocity, mut status) in &mut query {
+        let di_multiplier = match state {
+            UpAir => (1.0, 1.0),
+            DownAir => (0.8, 0.8),
+            FwdAir => (0.9, 1.0),
+            BackAir => (1.2, 1.0),
+            NeutralAir => (1.0, 1.0),
+            _ => (1.0, 1.0),
+        };
+
         match &*state {
             state if state.has_ground_physics() => {
                 status.busy = false;
@@ -35,12 +44,8 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
 
                     velocity.linear.y = AIR_JUMP_BASE_IMPULSE;
 
-                    // if stick dir != velocity dir -- but oh shit frame of reference might be an issue down the line if we add windspeed... ohwell.
-                    if velocity.linear.x * raw_input.stick.x > 0. {
-                        velocity.linear.x = 80. * raw_input.stick.x ;
-                    } else {
-                        velocity.linear.x += 30. * raw_input.stick.x ;
-                    }
+                    // Prioritize player intent on jump start to avoid carrying stale ground momentum.
+                    velocity.linear.x = 80. * raw_input.stick.x;
                 }
 
                 if state_ticks.0 >= 10 {
@@ -50,7 +55,7 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
                 if state_ticks.0 >= 100 || velocity.linear.y < 30.0 {
                     status.no_jump = false;
                 }
-                aerial_movement(&raw_input, &mut velocity);
+                aerial_movement(&raw_input, &mut velocity, di_multiplier);
             }
             AirJump => {
                 status.busy = true;
@@ -67,12 +72,12 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
             UpAir | DownAir | FwdAir | BackAir | NeutralAir => {
                 status.busy = true;
                 status.no_jump = true;
-                aerial_movement(&raw_input, &mut velocity);
+                aerial_movement(&raw_input, &mut velocity, di_multiplier);
             },
-            ControlledFall => {
+            ControlledAirborne => {
                 status.busy = false;
                 status.no_jump = false;
-                aerial_movement(&raw_input, &mut velocity);
+                aerial_movement(&raw_input, &mut velocity, di_multiplier);
             }
             SpinMove => {
                 status.busy = true;
@@ -105,9 +110,9 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
     }
 }
 
-pub(crate) fn aerial_movement(raw_input: &RawInput, velocity: &mut Velocity) {
+pub(crate) fn aerial_movement(raw_input: &RawInput, velocity: &mut Velocity, di_multiplier: (f32, f32)) {
     let apex_boost = (1.0 - velocity.linear.y.abs() / 20.0).clamp(0.0, 1.0);
 
     velocity.linear.x *= AIR_FRICTION;
-    velocity.linear.x += raw_input.stick.x * AIR_SPEED * (1.0 + 0.4 * apex_boost);
+    velocity.linear.x += raw_input.stick.x * di_multiplier.0 * AIR_SPEED * (1.0 + 0.4 * apex_boost);
 }

@@ -52,7 +52,7 @@ pub enum PlayerState {
     AirDodge,
     SpotDodge,
 
-    ControlledFall,
+    ControlledAirborne,
     UncontrolledFall,
 
     SmashDash,

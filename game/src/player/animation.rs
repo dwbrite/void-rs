@@ -56,7 +56,7 @@ pub fn playerstate_animation(mut query: Query<(&PlayerState, &mut AseAnimation, 
             PlayerState::DownAir if ticks.0 == 0 => {
                 animation.animation = Animation::tag("downair").with_repeat(Count(2));
             }
-            PlayerState::ControlledFall => {
+            PlayerState::ControlledAirborne => {
                 match velocity.linear.y {
                     y if y > 110.0 => animation.animation = Animation::tag("jumpfast"),
                     y if y > 100.0 => animation.animation = Animation::tag("jump2"),
@@ -67,13 +67,9 @@ pub fn playerstate_animation(mut query: Query<(&PlayerState, &mut AseAnimation, 
 
                     _ => {}
                 }
-            },
-            PlayerState::Jumping => {
-                // TODO: maybe move these to controlled fall, oop
-                match velocity.linear.y {
-                    _ if ticks.0 == 0 =>  animation.animation = Animation::tag("jump").with_repeat(AnimationRepeat::Count(0)),
-                    _ => {}
-                }
+            }
+            PlayerState::Jumping if ticks.0 == 0 => {
+                animation.animation = Animation::tag("jumpfast").with_repeat(AnimationRepeat::Count(0));
             }
             PlayerState::AirJump if ticks.0 == 0 => {
                 println!("started air jump anim");
