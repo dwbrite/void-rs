@@ -4,6 +4,7 @@
 // mod systems;
 
 mod input;
+mod player;
 
 use bevy::{camera::{RenderTarget, visibility::RenderLayers}, color::palettes::css::GRAY, prelude::*, render::render_resource::Extent3d, window::WindowResized};
 use bevy::asset::ErasedAssetLoader;
@@ -12,10 +13,10 @@ use bevy::render::render_resource::{
 };
 
 /// In-game resolution width.
-const RES_WIDTH: u32 = 640;
+const RES_WIDTH: u32 = 640 / 2;
 
 /// In-game resolution height.
-const RES_HEIGHT: u32 = 360;
+const RES_HEIGHT: u32 = 360 / 2;
 
 /// Default render layers for pixel-perfect rendering.
 /// You can skip adding this component, as this is the default.
@@ -67,13 +68,16 @@ enum PlayerMovement {
 
 use bevy::prelude::*;
 use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig};
+use bevy_aseprite_ultra::prelude::*;
 use bevy_rapier2d::na::DimAdd;
 use bevy_rapier2d::prelude::*;
-use crate::input::PlayerPlugin;
+use player::PlayerPlugin;
+use crate::input::detect_stick_events;
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins.set(ImagePlugin::default_nearest()), FpsOverlayPlugin {
+        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+        .add_plugins(FpsOverlayPlugin {
             config: FpsOverlayConfig {
                 text_config: TextFont {
                     // Here we define size of our overlay
@@ -95,24 +99,25 @@ fn main() {
                     target_fps: 144.0,
                 },
             },
-        },
-        ))
-        .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(16.0))
-        .add_plugins(RapierDebugRenderPlugin::default())
+        })
+        .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(26.0))
+        // .add_plugins(RapierDebugRenderPlugin::default())
         .add_plugins(PlayerPlugin)
+        .add_plugins(AsepriteUltraPlugin)
         .insert_resource(Time::<Fixed>::from_hz(128.0))
         .add_systems(Startup, (setup_camera, setup_movement_demo))
-        .add_systems(Update, (fit_canvas, animate_sprite))
+        .add_systems(Update, (fit_canvas, animate_sprite, detect_stick_events))
+        .init_asset::<Aseprite>()
         .run();
 }
 
 fn setup_movement_demo(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<ColorMaterial>>) {
     commands.spawn((
         PIXEL_PERFECT_LAYERS,
-        Transform::from_xyz(0.0, -119., 0.0),
+        Transform::from_xyz(0.0, -120., 0.0),
         Mesh2d(meshes.add(Rectangle::new(640.0, 120.0))),
         MeshMaterial2d(materials.add(Color::srgb(0.075, 0.06, 0.13))),
-        Collider::cuboid(320.0, 40.0),
+        Collider::cuboid(320.0, 60.0),
         RigidBody::Fixed,
     ));
 }

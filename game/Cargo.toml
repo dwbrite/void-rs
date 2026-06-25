@@ -16,9 +16,10 @@ opt-level = 3
 
 
 [dependencies]
-bevy = { version = "0.18.1", default-features = false, features = ["2d", "bevy_dev_tools", "bevy_ui_debug", "ui", "gamepad"] }
-thread-priority = "3.0.0"
+bevy = { version = "0.18.1", default-features = false, features = ["2d", "bevy_dev_tools", "bevy_ui_debug", "ui", "gamepad", "asset_processor"] }
 bevy_rapier2d = { version = "*", features = [ "simd-stable", "debug-render-2d" ] }
+bevy_aseprite_ultra = { version = "0.8.2",  features = ["asset_processing"]}
+heapless = "0.9.3"
 
 ir = { path = "../ir" }
 
