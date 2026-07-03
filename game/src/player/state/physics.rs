@@ -17,7 +17,7 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
             UpAir => (1.0, 1.0),
             DownAir => (0.8, 0.8),
             FwdAir => (0.9, 1.0),
-            BackAir => (1.2, 1.0),
+            BackAir => (1.3, 1.0),
             NeutralAir => (1.0, 1.0),
             _ => (1.0, 1.0),
         };
@@ -28,14 +28,29 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
                 status.no_jump = false;
 
                 if raw_input.stick.x.abs() >= 0.25 {
-                    if velocity.linear.x < 40.0 && velocity.linear.x > -40.0 {
                         velocity.linear.x *= GROUND_FRICTION;
-                        velocity.linear.x += raw_input.stick.x * 28.;
-                    } else {
-                        // velocity.linear.x *= AIR_FRICTION;
-                        // velocity.linear.x += raw_input.stick.x * 40.;
-                    }
+                        velocity.linear.x = raw_input.stick.x * 48.;
                 }
+            }
+            SuperJump => {
+                if state_ticks.0 == 10 {
+                    status.busy = true;
+                    status.no_jump = true;
+
+                    velocity.linear.y = AIR_JUMP_BASE_IMPULSE*2.0;
+
+                    // Prioritize player intent on jump start to avoid carrying stale ground momentum.
+                    velocity.linear.x = 120. * raw_input.stick.x;
+                }
+
+                if state_ticks.0 >= 15 {
+                    status.busy = false;
+                }
+
+                if state_ticks.0 >= 100 || velocity.linear.y < 30.0 {
+                    status.no_jump = false;
+                }
+                aerial_movement(&raw_input, &mut velocity, di_multiplier);
             }
             Jumping => {
                 if state_ticks.0 == 0 {
@@ -96,11 +111,26 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
                 }
             }
             GroundPound => {
-                status.busy = true;
-                status.no_jump = true;
+                if state_ticks.0 == 0 {
+                    status.busy = true;
+                    status.no_jump = true;
+                }
+                if state_ticks.0 > 40 {
+                    status.busy = false;
+                }
 
-                velocity.linear.x *= 0.98;
-                velocity.linear.y *= GROUND_FRICTION;
+                velocity.linear.x *= 0.92;
+                // velocity.linear.y *= GROUND_FRICTION;
+
+                // TODO: replace raw input threshold with a var/component or something idfk
+                // - maybe stick tuning shit
+                if raw_input.stick.x.abs() >= 0.25 {
+                    velocity.linear.x *= GROUND_FRICTION;
+                    velocity.linear.x = raw_input.stick.x * 48.;
+                }
+
+                velocity.linear.y *= 0.99;
+                velocity.linear.y -= 10.0;
             }
             _ => {
                 status.busy = false;

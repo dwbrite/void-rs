@@ -10,7 +10,7 @@ use bevy_aseprite_ultra::prelude::{Animation, AnimationRepeat, AseAnimation};
 use bevy_rapier2d::prelude::{ActiveEvents, Collider, CollisionEvent, Damping, ExternalImpulse, LockedAxes, RigidBody, Velocity};
 use crate::{AnimationIndices, AnimationTimer, PIXEL_PERFECT_LAYERS};
 use crate::player::{air_shit, animation, special_attacks, state, CharacterStatus, KineticEnergy, AIR_FRICTION, AIR_JUMP_BASE_IMPULSE, AIR_JUMP_DI_DOWN_STRENGTH, AIR_JUMP_DI_HORIZ_STRENGTH, AIR_JUMP_DI_UP_STRENGTH, AIR_JUMP_DURATION, AIR_JUMP_IMPULSE_DECAY, AIR_SPEED};
-use crate::player::state::{AirJumpsRemaining, AirborneState, Facing, PlayerAction, PlayerState, PreviousState, StateTicks};
+use crate::player::state::{AirJumpsRemaining, AirborneState, Facing, PlayerAction, PlayerState, PreviousState, SpringMass, StateTicks};
 
 #[derive(Component)]
 pub struct PlayerGamepad;
@@ -401,13 +401,16 @@ pub fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>, mut 
             ticks: 0,
             roll_state: None,
             smash: None,
+        },
+        SpringMass {
+            y: 0.0,
+            vy: 0.0,
+            k: 0.042,          // slower return (less stiff)
+            damping: 0.40,     // near single-overshoot territory
+            mass: 3.5,         // heavier = slower motion
+            last_parent_vy: 0.0,
+            parent_coupling: 0.06
         }
     ));
 }
-
-
-
-
-
-
 

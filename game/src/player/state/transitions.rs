@@ -17,6 +17,8 @@ use super::types::{AirJumpsRemaining, PlayerAction, PlayerState, StateTicks};
 
 use PlayerState::*;
 use crate::player::state::transitions::AtkDirection::{Fwd, Neutral};
+use bevy::ecs::change_detection::DetectChangesMut;
+
 
 enum AtkDirection {
     Up,
@@ -67,6 +69,14 @@ pub fn update_playerstate(
 
         let start_state = PreviousState(*playerstate);
         match (&*playerstate, &*playeraction) {
+            (SuperCrouch, PlayerAction::Jump) if state_ticks.0 >= 24 => {
+                *playerstate = SuperJump;
+            }
+
+            (SuperJump, _) if status.busy || state_ticks.0 <= 20 => {
+                println!("superjump busy");
+            }
+
             // special case for our special boy :^)
             (ChargedPunch, _) => {
                 if !status.busy && (velocity.linear.y < -30.0 || airborne == &Grounded) {
@@ -101,9 +111,23 @@ pub fn update_playerstate(
             },
 
             // once initial jump lock ends, hand over to fully controllable airborne state
-            (Jumping | AirJump, PlayerAction::None) if *airborne == Airborne && !status.busy => {
+            (Jumping | AirJump | SuperJump, PlayerAction::None) if *airborne == Airborne && !status.busy => {
                 *playerstate = ControlledAirborne;
             },
+
+            (GroundPound, PlayerAction::None) if !status.busy => {
+                if *airborne == Grounded {
+                    match raw_input {
+                        RawInput { stick, .. } if stick.y < -0.96 => {
+                            // make this access not trigger bevy ecs "Changed<PlayerState>"
+                            *playerstate.bypass_change_detection() = SuperCrouch;
+                        },
+                        _ => {
+                            *playerstate = Idle;
+                        }
+                    }
+                }
+            }
 
             (_, PlayerAction::None) if !status.busy && *airborne == Grounded => {
                 change_facing(raw_input, &mut facing);
@@ -153,17 +177,13 @@ pub fn update_playerstate(
 
             // special attack
             (_, PlayerAction::Special(_)) => {
-                match raw_input.stick.x {
-                    x if x > 0.0 => { *facing = Facing::Right; }
-                    x if x < 0.0 => { *facing = Facing::Left; }
-                    _ => {}
-                };
                 *playerstate = match attack_direction(raw_input, &facing) {
                     AtkDirection::Up => { SpinMove }
-                    AtkDirection::Down => { GroundPound }
-                    AtkDirection::Back => { ChargedPunch }
-                    AtkDirection::Fwd => { ChargedPunch }
+                    AtkDirection::Down if *airborne != Grounded => { GroundPound }
+                    AtkDirection::Back => { change_facing(raw_input, &mut facing); ChargedPunch }
+                    AtkDirection::Fwd => { change_facing(raw_input, &mut facing); ChargedPunch }
                     AtkDirection::Neutral => { Roll }
+                    AtkDirection::Down => { Roll } // yeah fuck you
                 }
             }
             _ if *airborne == Grounded && !status.busy => *playerstate = Idle,

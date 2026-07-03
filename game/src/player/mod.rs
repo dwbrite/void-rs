@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy_rapier2d::dynamics::Velocity;
 use crate::input;
 use crate::input::{InputBuffer, RawInput};
-use crate::player::state::{AirJumpsRemaining, AirborneState, PlayerAction, PlayerState, PreviousState, StateTicks};
+use crate::player::state::{sproing, AirJumpsRemaining, AirborneState, PlayerAction, PlayerState, PreviousState, StateTicks};
 
 pub mod special_attacks;
 pub mod state;
@@ -48,6 +48,7 @@ impl Plugin for PlayerPlugin {
             state::reset_air_jumps,
             state::update_playerstate_physics,
             update_kinetic_energy,
+            sproing,
             state::increment_state_ticks,
         ).chain());
     }
