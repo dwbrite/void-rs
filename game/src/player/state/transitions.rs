@@ -74,17 +74,23 @@ pub fn update_playerstate(
             }
 
             (SuperJump, _) if status.busy || state_ticks.0 <= 20 => {
-                println!("superjump busy");
+                // this is here for a reason I think
             }
 
             // special case for our special boy :^)
             (ChargedPunch, _) => {
-                if !status.busy && (velocity.linear.y < -30.0 || airborne == &Grounded) {
-                    *playerstate = ControlledAirborne;
+                if !status.busy && (velocity.linear.y < -30.0 || airborne == &Grounded){
+                    if airborne == &Grounded {
+                        *playerstate = Idle;
+                    } else {
+                        *playerstate = ControlledAirborne;
+                    }
                 }
             },
+
             // another special case~
             (GroundPound, PlayerAction::Special(_dir)) => {
+                change_facing(raw_input, &mut facing);
                 *playerstate = ChargedPunch;
             },
 

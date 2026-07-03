@@ -100,9 +100,9 @@ fn main() {
                 },
             },
         })
+        .add_plugins(PlayerPlugin)
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(26.0))
         // .add_plugins(RapierDebugRenderPlugin::default())
-        .add_plugins(PlayerPlugin)
         .add_plugins(AsepriteUltraPlugin)
         .insert_resource(Time::<Fixed>::from_hz(128.0))
         .add_systems(Startup, (setup_camera, setup_movement_demo))

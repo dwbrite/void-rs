@@ -119,8 +119,8 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
                     status.busy = false;
                 }
 
+                // yay magic number :3
                 velocity.linear.x *= 0.92;
-                // velocity.linear.y *= GROUND_FRICTION;
 
                 // TODO: replace raw input threshold with a var/component or something idfk
                 // - maybe stick tuning shit

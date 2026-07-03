@@ -41,7 +41,6 @@ pub fn playerstate_animation(mut query: Query<(&PlayerState, &mut AseAnimation, 
                 }
             },
             PlayerState::GroundPound => if ticks.0 == 0 {
-                println!("gp start");
                 animation.animation = Animation::tag("groundpound").with_repeat(Count(0));
             }
             PlayerState::Crouch => {
@@ -66,9 +65,6 @@ pub fn playerstate_animation(mut query: Query<(&PlayerState, &mut AseAnimation, 
                     _ => {}
                 }
             },
-            // PlayerState::Running => {
-            //     animation.animation = Animation::tag("run").with_speed(abs(velocity.linear.x / 56.0));
-            // },
             PlayerState::BackAir if ticks.0 == 0 => {
                 animation.animation = Animation::tag("air back kick").with_repeat(Count(0)).with_then("abk-hit", Count(1)).with_then("abk-rec", Count(0));
             },
