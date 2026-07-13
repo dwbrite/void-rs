@@ -52,6 +52,9 @@ pub fn update_playerstate(
 
     // TODO: down-b charge into side-spec for bonus momentum
     for (entity, mut playerstate, mut playeraction, raw_input, mut air_jumps, mut state_ticks, airborne, mut old_state, velocity, mut facing, status) in &mut query {
+
+        // TODO: bro, do input differently and also not right here, what the fuck?Z
+
         *playeraction = if raw_input.jump_pressed {
             PlayerAction::Jump
         } else if raw_input.spec_pressed {
@@ -61,11 +64,6 @@ pub fn update_playerstate(
         } else {
             PlayerAction::None
         };
-
-
-        if finished.contains(&entity) {
-            println!("finished anim {:?}", playerstate);
-        }
 
         let start_state = PreviousState(*playerstate);
         match (&*playerstate, &*playeraction) {

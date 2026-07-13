@@ -1,3 +1,5 @@
+use std::range::Range;
+use bevy::app::DynEq;
 use bevy::asset::ErasedAssetLoader;
 use bevy::camera::visibility::RenderLayers;
 use bevy::input::{ButtonInput, InputPlugin};
@@ -16,263 +18,121 @@ use crate::player::state::{AirJumpsRemaining, AirborneState, Facing, PlayerActio
 pub struct PlayerGamepad;
 
 use heapless::{HistoryBuf};
+use crate::input::Octant::{East, North, South, West};
 
-#[derive(PartialEq)]
 #[derive(Debug)]
-pub enum StickRegion {
-    Inner,
-    Middle,
-    Outer,
-    OuterN,
-    OuterNE,
-    OuterE,
-    OuterSE,
-    OuterS,
-    OuterSW,
-    OuterW,
-    OuterNW,
-}
-
-impl StickRegion {
-    pub fn in_region(&self, (x, y): (f32, f32)) -> bool {
-        let r2 = x*x + y*y;
-
-        const INNER_RADIUS: f32 = 0.25;
-        const MIDDLE_RADIUS: f32 = 0.7;
-
-        let in_inner = r2 < INNER_RADIUS * INNER_RADIUS;
-        let in_middle = r2 < MIDDLE_RADIUS * MIDDLE_RADIUS;
-
-
-        match self {
-            StickRegion::Inner => in_inner,
-            StickRegion::Middle => in_middle,
-
-            StickRegion::Outer => !in_inner && !in_middle,
-
-            StickRegion::OuterE => x >  0.92 && x.abs() > y.abs(),
-            StickRegion::OuterW => x < -0.92 && x.abs() > y.abs(),
-            StickRegion::OuterN => y >  0.92 && y.abs() > x.abs(),
-            StickRegion::OuterS => y < -0.92 && y.abs() > x.abs(),
-
-            StickRegion::OuterNE => x > 0.70 && y > 0.70,
-            StickRegion::OuterNW => x < -0.70 && y > 0.70,
-            StickRegion::OuterSE => x > 0.70 && y < -0.70,
-            StickRegion::OuterSW => x < -0.70 && y < -0.70,
-        }
-    }
-
-    pub fn from_point((x, y): (f32, f32)) -> Self {
-        let r2 = x * x + y * y;
-
-        const INNER_RADIUS: f32 = 0.25;
-        const MIDDLE_RADIUS: f32 = 0.7;
-
-        let inner2 = INNER_RADIUS * INNER_RADIUS;
-        let middle2 = MIDDLE_RADIUS * MIDDLE_RADIUS;
-
-        if r2 < inner2 {
-            return Self::Inner;
-        }
-
-        if r2 < middle2 {
-            return Self::Middle;
-        }
-
-        if x >  0.92 && x.abs() > y.abs() { return Self::OuterE; }
-        if x < -0.92 && x.abs() > y.abs() { return Self::OuterW; }
-
-        if y >  0.92 && y.abs() > x.abs() { return Self::OuterN; }
-        if y < -0.92 && y.abs() > x.abs() { return Self::OuterS; }
-
-        if x > 0.70 && y > 0.70 { return Self::OuterNE; }
-        if x < -0.70 && y > 0.70 { return Self::OuterNW; }
-        if x > 0.70 && y < -0.70 { return Self::OuterSE; }
-        if x < -0.70 && y < -0.70 { return Self::OuterSW; }
-
-        Self::Outer
-    }
-
-    fn ring_index(&self) -> Option<i8> {
-        use StickRegion::*;
-
-        match self {
-            OuterE  => Some(0),
-            OuterNE => Some(1),
-            OuterN  => Some(2),
-            OuterNW => Some(3),
-            OuterW  => Some(4),
-            OuterSW => Some(5),
-            OuterS  => Some(6),
-            OuterSE => Some(7),
-            _ => None, // Inner / Middle / Outer
-        }
-    }
+pub enum StickZone {
+    CenterX,
+    CenterY,
+    Edge(Octant),
+    Octant(Octant),
 }
 
 #[derive(PartialEq, Debug, Copy, Clone)]
-enum RollDirection {
-    Clockwise,
-    CounterClockwise,
+pub enum Octant {
+    East, Northeast, North, Northwest, West, Southwest, South, Southeast
 }
 
-#[derive(PartialEq, Debug, Copy, Clone)]
-pub enum DoHeRoll {
-    OhHeRollin(RollDirection),
-    HeBeenRollin(RollDirection),
-    HeDoneRollin,
+impl Octant {
+    pub fn from_oct(v: u8) -> Octant {
+        match v {
+            0 => Octant::East,
+            1 => Octant::Northeast,
+            2 => Octant::North,
+            3 => Octant::Northwest,
+            4 => Octant::West,
+            5 => Octant::Southwest,
+            6 => Octant::South,
+            7 => Octant::Southeast,
+            _ => panic!("Invalid octant value: {}", v),
+        }
+    }
+
+    pub fn to_u8(&self, octant: Octant) -> u8 {
+        match octant {
+            Octant::East => 0,
+            Octant::Northeast => 1,
+            Octant::North => 2,
+            Octant::Northwest => 3,
+            Octant::West => 4,
+            Octant::Southwest => 5,
+            Octant::South => 6,
+            Octant::Southeast => 7,
+        }
+    }
 }
 
-#[derive(PartialEq)]
-pub enum StickEvent {
-    SmashEvent(StickRegion),
-    RollEvent(DoHeRoll),
-    HoldEvent(StickRegion, usize), // ticks since hold
-    Wiggle,
+impl StickZone {
+    fn in_zone(&self, pos: &Vec2) -> bool {
+        let r2 = pos.x * pos.x + pos.y * pos.y;
+        let in_outer_ring = r2 > 0.90 * 0.90;
+
+        // Split the unit circle into 8 equal sectors (E, NE, N, NW, W, SW, S, SE).
+        let xy_octant = {
+            let angle = pos.y.atan2(pos.x).rem_euclid(std::f32::consts::TAU);
+            let octant = (((angle + std::f32::consts::PI / 8.0) / (std::f32::consts::PI / 4.0)).floor() as u8) % 8;
+            Octant::from_oct(octant)
+        };
+
+        match self {
+            StickZone::CenterX => pos.x.abs() <= 0.40,
+            StickZone::CenterY => pos.y.abs() <= 0.40,
+            StickZone::Edge(octant) => octant == &xy_octant && in_outer_ring,
+            StickZone::Octant(octant) => octant == &xy_octant,
+        }
+    }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpinDir { Cw, Ccw }
 
-// just imagine circles within the unit circle
+pub enum StickAction {
+    Flick(Octant),
+    Recenter,
+    Rotate(SpinDir),
+}
+
+pub struct ZoneTrigger {
+    from_zone: StickZone,
+    to_zone: StickZone,
+    frames: u64,
+    action: StickAction,
+}
+
 #[derive(Component)]
 pub struct StickWatcher9000 {
-    history: HistoryBuf<(StickRegion, usize), 15>,
-    ticks: usize,
-    roll_state: Option<RollDirection>,
-    smash: Option<SmashDirection>,
+    zone_triggers: Vec<ZoneTrigger>,
+    stick_hist: HistoryBuf<Vec2, 32>,
 }
 
-
-fn longest_run<I>(iter: I) -> usize
-where
-    I: Iterator<Item = bool>,
-{
-    let (mut best, mut cur) = (0, 0);
-
-    for ok in iter {
-        if ok {
-            cur += 1;
-            best = best.max(cur);
-        } else {
-            cur = 0;
-        }
+pub fn stick_watch(mut query: Query<(&mut StickWatcher9000, &RawInput)>) {
+    for (mut stickwatch, raw_input) in query.iter_mut() {
+        let pos = raw_input.stick;
+        stickwatch.stick_hist.write(pos);
+        stickwatch.check_zone_triggers();
     }
-
-    best
 }
-
-#[derive(PartialEq, Debug, Copy, Clone)]
-pub enum SmashDirection {
-    N,
-    NE,
-    E,
-    SE,
-    S,
-    SW,
-    W,
-    NW,
-}
-
 
 impl StickWatcher9000 {
-    pub fn detect_roll(&mut self) -> Option<RollDirection> {
-        const MAX_AGE: usize = 64; // 0.5s, meaning we must have at least 120rpm to start a roll, which is babycakes easy
-        const ROLL_LEN: usize = 5;
+    pub fn check_zone_triggers(&mut self) {
+        for trigger in self.zone_triggers.iter() {
+            if trigger.to_zone.in_zone(self.stick_hist.recent().unwrap_or(&Vec2::ZERO)) {
+                let last_n_recent: Vec<_> = self.stick_hist.oldest_ordered().rev().skip(1).take(trigger.frames as usize).collect();
 
-        let recent: Vec<_> = self.history
-            .iter()
-            .filter(|(_, tick)| self.ticks - *tick <= MAX_AGE)
-            .filter_map(|(region, tick)| region.ring_index().map(|r| (r, *tick)))
-            .collect();
+                for (idx, &pos) in last_n_recent.iter().enumerate() {
+                    if trigger.to_zone.in_zone(pos) {
+                        // stop processing if we've already triggered a flick
+                        break;
+                    }
 
-        if recent.len() < 2 {
-            return None;
-        }
-
-        let cw = longest_run(
-            recent.windows(2).map(|w| {
-                let ((a, _), (b, _)) = (w[0], w[1]);
-                (b - a).rem_euclid(8) == 7
-            })
-        );
-
-        let ccw = longest_run(
-            recent.windows(2).map(|w| {
-                let ((a, _), (b, _)) = (w[0], w[1]);
-                (b - a).rem_euclid(8) == 1
-            })
-        );
-
-        if cw >= ROLL_LEN && cw >= ccw {
-            Some(RollDirection::Clockwise)
-        } else if ccw >= ROLL_LEN {
-            Some(RollDirection::CounterClockwise)
-        } else {
-            None
-        }
-    }
-
-    pub fn detect_smash(&self) -> Option<SmashDirection> {
-        const MAX_FLICK_FRAMES: usize = 60; // tune this (4–8 usually feels good)
-
-        // let history: Vec<_> = self.history.iter().collect();
-
-        // search the most recent to find when we were in an inner state
-        // find the edge and compare that to the most recent OuterCardinal, and do a smash if
-
-        // find latest inner tick
-        let (inner_tick, last_tick) = self.history.windows(2).rfind(|w| w[0].0 == StickRegion::Inner && w[1].0 != StickRegion::Inner)
-            .map(|w| (Some(&w[0].1), w[1].1)).unwrap_or((None, 0));
-
-        // if inner tick exists and
-        if inner_tick.is_some() {
-            if let Some((_, recent_tick)) = self.history.recent() {
-                let tick_ct = recent_tick - last_tick;
-                if recent_tick - last_tick > MAX_FLICK_FRAMES {
-                    // println!("took {tick_ct} ticks");
-                    return None;
+                    if trigger.from_zone.in_zone(pos) {
+                        // TODO: report flick and stop processing
+                        println!("went from zone {:?} to {:?} in {} frames", trigger.from_zone, trigger.to_zone, idx+1);
+                        break;
+                    }
                 }
             }
-
-            match self.history.recent() {
-                Some((StickRegion::OuterN, _)) => return Some(SmashDirection::N),
-                Some((StickRegion::OuterNE, _)) => return Some(SmashDirection::NE),
-                Some((StickRegion::OuterE, _)) => return Some(SmashDirection::E),
-                Some((StickRegion::OuterSE, _)) => return Some(SmashDirection::SE),
-                Some((StickRegion::OuterS, _)) => return Some(SmashDirection::S),
-                Some((StickRegion::OuterSW, _)) => return Some(SmashDirection::SW),
-                Some((StickRegion::OuterW, _)) => return Some(SmashDirection::W),
-                Some((StickRegion::OuterNW, _)) => return Some(SmashDirection::NW),
-                _ => { return None; }
-            }
         }
-
-        None
-    }
-}
-
-pub fn detect_stick_events(mut query: Query<(&mut StickWatcher9000, &RawInput)>) {
-    for (mut stickwatch, input) in query.iter_mut() {
-        let ticks = stickwatch.ticks;
-        let region = StickRegion::from_point((input.stick.x, input.stick.y));
-        if stickwatch.history.recent().is_some_and(|(last, _)| region != *last) || stickwatch.history.is_empty() {
-            stickwatch.history.write((region, ticks));
-        }
-
-        let maybe_roll = stickwatch.detect_roll();
-        if maybe_roll != stickwatch.roll_state {
-            println!("edging to {:?}", maybe_roll);
-        }
-        stickwatch.roll_state = maybe_roll;
-
-
-        let maybe_smash = stickwatch.detect_smash();
-        if maybe_smash != stickwatch.smash {
-            println!("edge smashing to {:?}", maybe_smash);
-        }
-        stickwatch.smash = maybe_smash;
-
-
-        stickwatch.ticks += 1;
     }
 }
 
@@ -401,10 +261,55 @@ pub fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>, mut 
             no_jump: false,
         },
         StickWatcher9000 {
-            history: HistoryBuf::new(),
-            ticks: 0,
-            roll_state: None,
-            smash: None,
+            zone_triggers: {
+                let mut triggers = vec![];
+
+                let rotations: Vec<ZoneTrigger> = (0..8).flat_map(|i| {
+                    let a = Octant::from_oct(i);
+                    let b = Octant::from_oct((i + 1) % 8);
+                    [
+                        ZoneTrigger { from_zone: StickZone::Edge(a), to_zone: StickZone::Edge(b),
+                            frames: 2, action: StickAction::Rotate(SpinDir::Ccw) },
+                        ZoneTrigger { from_zone: StickZone::Edge(b), to_zone: StickZone::Edge(a),
+                            frames: 2, action: StickAction::Rotate(SpinDir::Cw) },
+                    ]
+                }).collect();
+
+                let flicks: Vec<ZoneTrigger> = vec![
+                    ZoneTrigger {
+                        from_zone: StickZone::CenterX,
+                        to_zone: StickZone::Edge(East),
+                        frames: 3,
+                        action: StickAction::Flick(East),
+                    },
+                    ZoneTrigger {
+                        from_zone: StickZone::CenterX,
+                        to_zone: StickZone::Edge(West),
+                        frames: 3,
+                        action: StickAction::Flick(West),
+                    },
+                    ZoneTrigger {
+                        from_zone: StickZone::CenterY,
+                        to_zone: StickZone::Edge(North),
+                        frames: 3,
+                        action: StickAction::Flick(North),
+                    },
+                    ZoneTrigger {
+                        from_zone: StickZone::CenterY,
+                        to_zone: StickZone::Edge(South),
+                        frames: 3,
+                        action: StickAction::Flick(South),
+                    }
+                ];
+
+
+
+                triggers.extend(rotations);
+                triggers.extend(flicks);
+
+                triggers
+            },
+            stick_hist: HistoryBuf::new(),
         },
         SpringMass {
             y: 0.0,

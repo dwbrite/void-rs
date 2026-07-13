@@ -72,7 +72,7 @@ use bevy_aseprite_ultra::prelude::*;
 use bevy_rapier2d::na::DimAdd;
 use bevy_rapier2d::prelude::*;
 use player::PlayerPlugin;
-use crate::input::detect_stick_events;
+use crate::input::stick_watch;
 
 fn main() {
     App::new()
@@ -106,7 +106,7 @@ fn main() {
         .add_plugins(AsepriteUltraPlugin)
         .insert_resource(Time::<Fixed>::from_hz(128.0))
         .add_systems(Startup, (setup_camera, setup_movement_demo))
-        .add_systems(Update, (fit_canvas, animate_sprite, detect_stick_events))
+        .add_systems(Update, (fit_canvas, animate_sprite, stick_watch))
         .init_asset::<Aseprite>()
         .run();
 }
