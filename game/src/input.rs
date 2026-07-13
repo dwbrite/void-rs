@@ -280,6 +280,8 @@ pub fn detect_stick_events(mut query: Query<(&mut StickWatcher9000, &RawInput)>)
 pub struct RawInput {
     pub stick: Vec2,
     pub jump_held: bool,
+    pub spec_held: bool,
+    pub atk_held: bool,
     pub jump_pressed: bool,
     pub spec_pressed: bool,
     pub atk_pressed: bool,
@@ -342,8 +344,8 @@ pub fn read_raw_input(
         for (name, gamepad) in &gamepads {
             if !name.contains("Ultimate") { continue; }
             raw_inputs.jump_held = gamepad.pressed(jump);
-            // raw_inputs.spec_held = gamepad.pressed(spec);
-            // raw_inputs.atk_held = gamepad.pressed(atk);
+            raw_inputs.spec_held = gamepad.pressed(spec);
+            raw_inputs.atk_held = gamepad.pressed(atk);
             raw_inputs.stick = gamepad.left_stick();
         }
     }
@@ -367,6 +369,8 @@ pub fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>, mut 
         RawInput {
             stick: Vec2 { x: 0.0, y: 0.0 },
             jump_held: false,
+            spec_held: false,
+            atk_held: false,
             jump_pressed: false,
             spec_pressed: false,
             atk_pressed: false,

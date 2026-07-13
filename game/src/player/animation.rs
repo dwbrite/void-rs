@@ -68,11 +68,23 @@ pub fn playerstate_animation(mut query: Query<(&PlayerState, &mut AseAnimation, 
             PlayerState::BackAir if ticks.0 == 0 => {
                 animation.animation = Animation::tag("air back kick").with_repeat(Count(0)).with_then("abk-hit", Count(1)).with_then("abk-rec", Count(0));
             },
-            PlayerState::FwdAir => {
+            PlayerState::FwdAir => { // TODO: find out if fwd air is... supposed to be... resettable?
                 animation.animation = Animation::tag("air kick").with_repeat(Count(0));
             }
             PlayerState::DownAir if ticks.0 == 0 => {
                 animation.animation = Animation::tag("downair").with_repeat(Count(2));
+            }
+            PlayerState::NeutralAir => {
+                animation.animation = Animation::tag("basic punch").with_repeat(Count(0));
+            }
+            PlayerState::Interact => {
+                animation.animation = Animation::tag("interact").with_repeat(Count(0));
+            }
+            PlayerState::Interactnt => if ticks.0 == 0 {
+                animation.animation = Animation::tag("basic punch rec").with_repeat(Count(0));
+            }
+            PlayerState::NeutralAir => {
+                animation.animation = Animation::tag("basic punch").with_repeat(Count(0));
             }
             PlayerState::ControlledAirborne => {
                 match velocity.linear.y {

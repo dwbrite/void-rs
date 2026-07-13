@@ -64,6 +64,8 @@ pub enum PlayerState {
     FwdAir,
     BackAir,
     NeutralAir,
+    Interact,
+    Interactnt,
 
     UpAtk,
     DownAtk,
