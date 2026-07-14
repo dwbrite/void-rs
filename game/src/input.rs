@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use enum_map::{enum_map, Enum, EnumMap};
 use std::range::Range;
 use bevy::app::DynEq;
 use bevy::asset::ErasedAssetLoader;
@@ -18,6 +20,7 @@ use crate::player::state::{AirJumpsRemaining, AirborneState, Facing, PlayerActio
 pub struct PlayerGamepad;
 
 use heapless::{HistoryBuf};
+use crate::input::ButtonState::{Held, JustPressed, JustReleased, Released};
 use crate::input::Octant::{East, North, South, West};
 
 #[derive(Debug)]
@@ -28,7 +31,7 @@ pub enum StickZone {
     Octant(Octant),
 }
 
-#[derive(PartialEq, Debug, Copy, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Enum)]
 pub enum Octant {
     East, Northeast, North, Northwest, West, Southwest, South, Southeast
 }
@@ -48,8 +51,8 @@ impl Octant {
         }
     }
 
-    pub fn to_u8(&self, octant: Octant) -> u8 {
-        match octant {
+    pub fn to_u8(&self) -> u8 {
+        match self {
             Octant::East => 0,
             Octant::Northeast => 1,
             Octant::North => 2,
@@ -136,77 +139,165 @@ impl StickWatcher9000 {
     }
 }
 
-#[derive(Component)]
-pub struct RawInput {
-    pub stick: Vec2,
-    pub jump_held: bool,
-    pub spec_held: bool,
-    pub atk_held: bool,
-    pub jump_pressed: bool,
-    pub spec_pressed: bool,
-    pub atk_pressed: bool,
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Enum)]
+pub enum InputAction {
+    Jump,
+    Special,
+    Attack,
+    Grab,
+    Dodge,
+    Pause,
+    SelectUndef,
+    LStickUndef,
+    RStickUndef,
+    LBUndef,
+    RBUndef,
+    DUp,
+    DDown,
+    DLeft,
+    DRight,
+    LSTap(Octant),
+    RSTap(Octant),
 }
 
-#[derive(Resource)]
-pub struct InputBuffer {
-    pub jump_buffered: bool,
-    pub spec_buffered: bool,
-    pub atk_buffered: bool,
-}
+pub fn piss_buckets() -> PissBucket {
+    let ctrl_map: EnumMap<InputAction, GamepadButton> = enum_map! {
+        InputAction::Jump => GamepadButton::North,
+        InputAction::Special => GamepadButton::West,
+        InputAction::Attack => GamepadButton::South,
+        InputAction::Grab => GamepadButton::East,
+        InputAction::Dodge => GamepadButton::RightTrigger,
+        InputAction::Pause => GamepadButton::Start,
+        InputAction::SelectUndef => GamepadButton::Select,
+        InputAction::LStickUndef => GamepadButton::LeftThumb,
+        InputAction::RStickUndef => GamepadButton::RightThumb,
+        InputAction::LBUndef => GamepadButton::LeftTrigger,
+        InputAction::RBUndef => GamepadButton::RightTrigger,
+        InputAction::DUp => GamepadButton::DPadUp,
+        InputAction::DDown => GamepadButton::DPadDown,
+        InputAction::DLeft => GamepadButton::DPadLeft,
+        InputAction::DRight => GamepadButton::DPadRight,
+        // TODO: make all this Optional and cry about the "complexity" later.
+        InputAction::LSTap(o) => GamepadButton::Other(o.to_u8()),
+        InputAction::RSTap(o) => GamepadButton::Other(o.to_u8()),
+    };
 
-pub fn buffer_jump_input(
-    gamepads: Query<(&Name, &Gamepad)>,
-    mut buffer: ResMut<InputBuffer>,
-) {
-    let jump = GamepadButton::North;
-    let spec = GamepadButton::West;
-    let atk = GamepadButton::South;
-    for (name, gamepad) in &gamepads {
-        if !name.contains("Ultimate") { continue; }  // same filter as everywhere else
-        if gamepad.just_pressed(jump) {
-            buffer.jump_buffered = true;
-        }
-
-        if gamepad.just_pressed(spec) {
-            buffer.spec_buffered = true;
-        }
-
-        if gamepad.just_pressed(atk) {
-            buffer.atk_buffered = true;
+    PissBucket {
+        input_map: ctrl_map,
+        piss_butt: enum_map! {,
+            InputAction::Jump => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::Special => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::Attack => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::Grab => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::Dodge => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::Pause => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::SelectUndef => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::LStickUndef => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::RStickUndef => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::LBUndef => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::RBUndef => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::DUp => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::DDown => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::DLeft => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::DRight => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::LSTap(_) => ButtBuffer { state: Released, ticks_since_pressed: 255 },
+            InputAction::RSTap(_) => ButtBuffer { state: Released, ticks_since_pressed: 255 },
         }
     }
 }
 
+pub enum ButtonState {
+    JustPressed,
+    Held, // todo: pressure or any other analog signal. typically seen from ps2/3 face btns
+    JustReleased,
+    Released,
+}
+
+impl ButtonState {
+    pub fn is_pressed(&self) -> bool {
+        match self {
+            JustPressed => { true }
+            Held => { true }
+            JustReleased => { false }
+            Released => { false }
+        }
+    }
+}
+
+pub struct ButtBuffer {
+    state: ButtonState,
+    ticks_since_pressed: u8,
+}
+
+impl ButtBuffer {
+    pub fn is_pressed(&self) -> bool {
+        // inline always pls lmao
+        self.state.is_pressed()
+    }
+
+    pub fn is_buffered(&self) -> bool {
+        self.ticks_since_pressed < 16
+    }
+
+    pub fn eat_buffer(&mut self) -> bool {
+        let b = self.ticks_since_pressed < 16;
+        self.ticks_since_pressed = 255;
+        b
+    }
+}
+
+#[derive(Component)]
+pub struct PissBucket {
+    input_map: EnumMap<InputAction, GamepadButton>,
+    piss_butt: EnumMap<InputAction, ButtBuffer>,
+}
+
+impl PissBucket {
+    pub fn update_muchachos(&mut self, gamepad: &Gamepad) {
+        for (action, buffer) in self.piss_butt.iter_mut() {
+            let btn: GamepadButton = self.input_map[action];
+            let pressed = gamepad.pressed(btn);
+
+            buffer.state = if pressed {
+                match buffer.state {
+                    JustPressed | Held => { Held }
+                    _ => {
+                        buffer.ticks_since_pressed = 0;
+                        JustPressed
+                    },
+                }
+            } else {
+                // we only track up to 2 seconds of inputs, so, idfk
+                if buffer.ticks_since_pressed < 255 {
+                    buffer.ticks_since_pressed += 1;
+                }
+
+                match buffer.state {
+                    JustPressed | Held => { JustReleased }
+                    _ => { Released }
+                }
+            };
+        }
+    }
+
+    pub fn is_buffered(&self, action: InputAction) -> bool {
+        self.piss_butt[action].is_buffered()
+    }
+
+    pub fn eat_buffer(&mut self, action: InputAction) -> bool {
+        self.piss_butt[action].eat_buffer()
+    }
+}
 // runs in FixedUpdate — consumes the buffer
-pub fn read_raw_input(
-    mut query: Query<&mut RawInput>,
+pub fn update_inputter(
+    mut piss_bucket: Query<&mut PissBucket>,
     gamepads: Query<(&Name, &Gamepad)>,
-    mut buffer: ResMut<InputBuffer>,
 ) {
-    let jump = GamepadButton::North;
-    let spec = GamepadButton::West;
-    let atk = GamepadButton::South;
-
-    let jump_pressed = buffer.jump_buffered;
-    buffer.jump_buffered = false;
-
-    let spec_pressed = buffer.spec_buffered;
-    buffer.spec_buffered = false;
-
-    let atk_pressed = buffer.atk_buffered;
-    buffer.atk_buffered = false;
-
-    for mut raw_inputs in &mut query {
-        raw_inputs.jump_pressed = jump_pressed;
-        raw_inputs.spec_pressed = spec_pressed;
-        raw_inputs.atk_pressed = atk_pressed;
-
+    for mut piss in &mut piss_bucket {
         for (name, gamepad) in &gamepads {
+            // TODO: save controller join order
             if !name.contains("Ultimate") { continue; }
-            raw_inputs.jump_held = gamepad.pressed(jump);
-            raw_inputs.spec_held = gamepad.pressed(spec);
-            raw_inputs.atk_held = gamepad.pressed(atk);
-            raw_inputs.stick = gamepad.left_stick();
+            piss.update_muchachos(gamepad);
         }
     }
 }
@@ -226,15 +317,7 @@ pub fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>, mut 
         StateTicks(0),
         Transform::from_xyz(0.0, 0.0, 0.0),
         animation_indices,
-        RawInput {
-            stick: Vec2 { x: 0.0, y: 0.0 },
-            jump_held: false,
-            spec_held: false,
-            atk_held: false,
-            jump_pressed: false,
-            spec_pressed: false,
-            atk_pressed: false,
-        },
+
         PIXEL_PERFECT_LAYERS,
         AirJumpsRemaining(5),
         Collider::cuboid(4., 5.),

@@ -3,7 +3,7 @@ use bevy::math::ops::abs;
 use bevy::prelude::{Changed, Entity, Query, Sprite};
 use bevy::ui::State;
 use bevy_aseprite_ultra::prelude::{Animation, AnimationDirection, AnimationEvents, AnimationRepeat, AseAnimation};
-use bevy_aseprite_ultra::prelude::AnimationRepeat::Count;
+use bevy_aseprite_ultra::prelude::AnimationRepeat::{Count, Loop};
 use bevy_rapier2d::prelude::Velocity;
 use crate::input::RawInput;
 use crate::player::AIR_SPEED;
@@ -78,13 +78,16 @@ pub fn playerstate_animation(mut query: Query<(&PlayerState, &mut AseAnimation, 
                 animation.animation = Animation::tag("basic punch").with_repeat(Count(0));
             }
             PlayerState::Interact => {
-                animation.animation = Animation::tag("interact").with_repeat(Count(0));
+                animation.animation = Animation::tag("interact").with_repeat(Loop);
             }
             PlayerState::Interactnt => if ticks.0 == 0 {
                 animation.animation = Animation::tag("basic punch rec").with_repeat(Count(0));
             }
             PlayerState::NeutralAir => {
                 animation.animation = Animation::tag("basic punch").with_repeat(Count(0));
+            }
+            PlayerState::UpAir if ticks.0 == 0 => {
+                animation.animation = Animation::tag("upkick").with_repeat(Count(0));
             }
             PlayerState::ControlledAirborne => {
                 match velocity.linear.y {

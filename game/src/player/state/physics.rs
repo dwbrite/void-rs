@@ -85,7 +85,7 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
                 }
             },
             UpAir | DownAir | FwdAir | BackAir | NeutralAir => {
-                status.busy = true;
+                status.busy = true ;
                 status.no_jump = true;
                 aerial_movement(&raw_input, &mut velocity, di_multiplier);
             },
@@ -131,6 +131,12 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
 
                 velocity.linear.y *= 0.99;
                 velocity.linear.y -= 10.0;
+            }
+            Interact => {
+                status.busy = true;
+            }
+            Interactnt => {
+                status.busy = true;
             }
             _ => {
                 status.busy = false;

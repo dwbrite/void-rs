@@ -93,23 +93,34 @@ pub fn update_playerstate(
             },
 
             // attacks/animations that are complete upon animation completion
-            (UpAir | DownAir | FwdAir | BackAir | NeutralAir | Jumping | Interact, PlayerAction::None) if finished.contains(&entity) => {
+            (UpAir | DownAir | FwdAir | BackAir| Jumping, PlayerAction::None) if finished.contains(&entity) => {
                 match airborne {
                     Airborne => {
                         *playerstate = ControlledAirborne;
                     }
                     Grounded => {
-                        if *playerstate == NeutralAir && raw_input.atk_held {
-                            *playerstate = Interact;
-                        } else if *playerstate == Interact && !raw_input.atk_held {
-                            *playerstate = Interactnt;
-                        } else {
-                            *playerstate = Idle;
-                        }
+                        *playerstate = Idle;
                     }
                 }
             },
-
+            (NeutralAir, _) if finished.contains(&entity) => {
+                *playerstate = Interact;
+            }
+            (Interact, _) => {
+                if state_ticks.0 >= 8 && !raw_input.atk_held {
+                    *playerstate = Interactnt;
+                }
+            }
+            (Interactnt, _) if finished.contains(&entity) => {
+                match airborne {
+                    Airborne => {
+                        *playerstate = ControlledAirborne;
+                    }
+                    Grounded => {
+                        *playerstate = Idle;
+                    }
+                }
+            }
             // jump
             (_, PlayerAction::Jump) if !status.no_jump && !status.busy => {
                 if *airborne == Airborne && air_jumps.0 > 0 {
