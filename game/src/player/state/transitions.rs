@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use bevy::math::Vec2;
-use bevy::prelude::{Changed, Entity, MessageReader, Query, Res};
+use bevy::prelude::{Changed, Entity, MessageReader, Query, ResMut};
 use bevy::tasks::futures_lite::StreamExt;
 use bevy_aseprite_ultra::prelude::{AnimationEvents, AseAnimation};
 use bevy_rapier2d::dynamics::Velocity;
@@ -34,8 +34,8 @@ pub fn attack_direction(move_x: f32, move_y: f32, facing: &Facing) -> AtkDirecti
     match (move_x, move_y) {
         (_, y) if y >  0.6 => AtkDirection::Up,
         (_, y) if y < -0.85 => AtkDirection::Down,
-        (x, _) if x * facing.sign() >  0.5 => AtkDirection::Fwd,
-        (x, _) if x * facing.sign() < -0.5 => AtkDirection::Back,
+        (x, _) if x * facing.sign() >  0.4 => AtkDirection::Fwd,
+        (x, _) if x * facing.sign() < -0.4 => AtkDirection::Back,
         (_, _) => { AtkDirection::Neutral }
     }
 }
@@ -43,7 +43,7 @@ pub fn attack_direction(move_x: f32, move_y: f32, facing: &Facing) -> AtkDirecti
 pub fn update_playerstate(
     mut animation_events: MessageReader<AnimationEvents>,
     mut query: Query<(Entity, &mut PlayerState, &mut PlayerAction, &mut AirJumpsRemaining, &mut StateTicks, &AirborneState, &mut PreviousState, &Velocity, &mut Facing, &CharacterStatus)>,
-    input_map: Res<ActionMap<InputAction>>,
+    mut input_map: ResMut<ActionMap<InputAction>>,
 ) {
     let finished: HashSet<Entity> = animation_events
         .read()
@@ -59,7 +59,11 @@ pub fn update_playerstate(
         let move_y = input_map.value(InputAction::MoveY);
         let jump_pressed = input_map.just_pressed(InputAction::Jump);
         let spec_pressed = input_map.just_pressed(InputAction::Special);
+        let spec_buffered = !status.busy && input_map.buffered_press(InputAction::Special, 0.1);
+        let spec_pressed = spec_pressed || spec_buffered;
         let atk_pressed = input_map.just_pressed(InputAction::Attack);
+        let atk_buffered = !status.busy && input_map.buffered_press(InputAction::Attack, 0.1);
+        let atk_pressed = atk_pressed || atk_buffered;
         let atk_held = input_map.is_down(InputAction::Attack);
 
         *playeraction = if jump_pressed {
@@ -95,8 +99,13 @@ pub fn update_playerstate(
 
             // another special case~
             (GroundPound, PlayerAction::Special(_dir)) => {
-                change_facing(move_x, &mut facing);
-                *playerstate = ChargedPunch;
+                match attack_direction(move_x, move_y, &facing) {
+                    AtkDirection::Back | AtkDirection::Fwd => {
+                        change_facing(move_x, &mut facing);
+                        *playerstate = ChargedPunch;
+                    }
+                    _ => {}
+                }
             },
 
             // attacks/animations that are complete upon animation completion

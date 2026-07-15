@@ -118,7 +118,7 @@ fn setup_movement_demo(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>,
         PIXEL_PERFECT_LAYERS,
         Transform::from_xyz(0.0, -120., 0.0),
         Mesh2d(meshes.add(Rectangle::new(640.0, 120.0))),
-        MeshMaterial2d(materials.add(Color::srgb(0.075, 0.06, 0.13))),
+        MeshMaterial2d(materials.add(Color::srgb(0.122, 0.082, 0.247))),
         Collider::cuboid(320.0, 60.0),
         RigidBody::Fixed,
     ));
