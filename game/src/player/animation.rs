@@ -1,13 +1,14 @@
 use std::collections::HashSet;
 use bevy::math::ops::abs;
-use bevy::prelude::{Changed, Entity, Query, Sprite};
+use bevy::prelude::{Changed, Entity, Query, Res, Sprite};
 use bevy::ui::State;
 use bevy_aseprite_ultra::prelude::{Animation, AnimationDirection, AnimationEvents, AnimationRepeat, AseAnimation};
 use bevy_aseprite_ultra::prelude::AnimationRepeat::{Count, Loop};
 use bevy_rapier2d::prelude::Velocity;
-use crate::input::RawInput;
+use crate::input::InputAction;
 use crate::player::AIR_SPEED;
 use crate::player::state::{Facing, PlayerState, SpringMass, StateTicks};
+use crate::systems::input::ActionMap;
 
 pub fn flip_sprite(mut query: Query<(&Facing, &mut Sprite), Changed<Facing>>) {
     for (facing, mut sprite) in &mut query {
@@ -15,8 +16,12 @@ pub fn flip_sprite(mut query: Query<(&Facing, &mut Sprite), Changed<Facing>>) {
     }
 }
 
-pub fn playerstate_animation(mut query: Query<(&PlayerState, &mut AseAnimation, &Velocity, &StateTicks, &RawInput, &SpringMass)>) {
-    for (playerstate, mut animation, velocity, ticks, raw_input, spring) in &mut query {
+pub fn playerstate_animation(
+    input_map: Res<ActionMap<InputAction>>,
+    mut query: Query<(&PlayerState, &mut AseAnimation, &Velocity, &StateTicks, &SpringMass)>,
+) {
+    let move_y = input_map.value(InputAction::MoveY);
+    for (playerstate, mut animation, velocity, ticks, spring) in &mut query {
         match playerstate {
             PlayerState::Idle | PlayerState::Running => {
                 match spring.y {
@@ -32,7 +37,7 @@ pub fn playerstate_animation(mut query: Query<(&PlayerState, &mut AseAnimation, 
                 }
             },
             PlayerState::Lookup => {
-                match raw_input.stick.y {
+                match move_y {
                     y if y > 0.96 => { animation.animation = Animation::tag("lookup4"); }
                     y if y > 0.90 => { animation.animation = Animation::tag("lookup3"); }
                     y if y > 0.60 => { animation.animation = Animation::tag("lookup2"); }
@@ -44,7 +49,7 @@ pub fn playerstate_animation(mut query: Query<(&PlayerState, &mut AseAnimation, 
                 animation.animation = Animation::tag("groundpound").with_repeat(Count(0));
             }
             PlayerState::Crouch => {
-                match raw_input.stick.y {
+                match move_y {
                     y if y < -0.90 => { animation.animation = Animation::tag("pre-supercrouch"); animation.animation.pause(); }
                     y if y < -0.70 => { animation.animation = Animation::tag("hardcrouch"); }
                     y if y < -0.65 => { animation.animation = Animation::tag("crouch"); }

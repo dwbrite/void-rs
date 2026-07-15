@@ -1,14 +1,16 @@
 use std::collections::HashSet;
-use bevy::prelude::{Changed, Entity, MessageReader, Query};
+use bevy::math::Vec2;
+use bevy::prelude::{Changed, Entity, MessageReader, Query, Res};
 use bevy::tasks::futures_lite::StreamExt;
 use bevy_aseprite_ultra::prelude::{AnimationEvents, AseAnimation};
 use bevy_rapier2d::dynamics::Velocity;
-use crate::input::RawInput;
+use crate::input::InputAction;
 use crate::player::{CharacterStatus, AIR_JUMP_DURATION};
 use crate::player::state::{AirborneState, Facing, PreviousState};
 use crate::player::state::AirborneState::{Airborne, Grounded};
 use crate::player::state::PlayerState::SuperCrouch;
 use super::types::{AirJumpsRemaining, PlayerAction, PlayerState, StateTicks};
+use crate::systems::input::ActionMap;
 
 
 // TODO: track how much we've been jumping around - let lil chud catch his breath over a few seconds, with heavy breathing to light breathing.
@@ -28,8 +30,8 @@ enum AtkDirection {
     Neutral,
 }
 
-pub fn attack_direction(raw_input: &RawInput, facing: &Facing) -> AtkDirection {
-    match (raw_input.stick.x, raw_input.stick.y) {
+pub fn attack_direction(move_x: f32, move_y: f32, facing: &Facing) -> AtkDirection {
+    match (move_x, move_y) {
         (_, y) if y >  0.6 => AtkDirection::Up,
         (_, y) if y < -0.85 => AtkDirection::Down,
         (x, _) if x * facing.sign() >  0.5 => AtkDirection::Fwd,
@@ -40,7 +42,8 @@ pub fn attack_direction(raw_input: &RawInput, facing: &Facing) -> AtkDirection {
 
 pub fn update_playerstate(
     mut animation_events: MessageReader<AnimationEvents>,
-    mut query: Query<(Entity, &mut PlayerState, &mut PlayerAction, &RawInput, &mut AirJumpsRemaining, &mut StateTicks, &AirborneState, &mut PreviousState, &Velocity, &mut Facing, &CharacterStatus)>,
+    mut query: Query<(Entity, &mut PlayerState, &mut PlayerAction, &mut AirJumpsRemaining, &mut StateTicks, &AirborneState, &mut PreviousState, &Velocity, &mut Facing, &CharacterStatus)>,
+    input_map: Res<ActionMap<InputAction>>,
 ) {
     let finished: HashSet<Entity> = animation_events
         .read()
@@ -51,16 +54,20 @@ pub fn update_playerstate(
         .collect();
 
     // TODO: down-b charge into side-spec for bonus momentum
-    for (entity, mut playerstate, mut playeraction, raw_input, mut air_jumps, mut state_ticks, airborne, mut old_state, velocity, mut facing, status) in &mut query {
+    for (entity, mut playerstate, mut playeraction, mut air_jumps, mut state_ticks, airborne, mut old_state, velocity, mut facing, status) in &mut query {
+        let move_x = input_map.value(InputAction::MoveX);
+        let move_y = input_map.value(InputAction::MoveY);
+        let jump_pressed = input_map.just_pressed(InputAction::Jump);
+        let spec_pressed = input_map.just_pressed(InputAction::Special);
+        let atk_pressed = input_map.just_pressed(InputAction::Attack);
+        let atk_held = input_map.is_down(InputAction::Attack);
 
-        // TODO: bro, do input differently and also not right here, what the fuck?Z
-
-        *playeraction = if raw_input.jump_pressed {
+        *playeraction = if jump_pressed {
             PlayerAction::Jump
-        } else if raw_input.spec_pressed {
-            PlayerAction::Special(raw_input.stick)
-        } else if raw_input.atk_pressed {
-            PlayerAction::Attack(raw_input.stick)
+        } else if spec_pressed {
+            PlayerAction::Special(Vec2::new(move_x, move_y))
+        } else if atk_pressed {
+            PlayerAction::Attack(Vec2::new(move_x, move_y))
         } else {
             PlayerAction::None
         };
@@ -77,8 +84,8 @@ pub fn update_playerstate(
 
             // special case for our special boy :^)
             (ChargedPunch, _) => {
-                if !status.busy && (velocity.linear.y < -30.0 || airborne == &Grounded){
-                    if airborne == &Grounded {
+                if !status.busy && (velocity.linear.y < -30.0 || *airborne == Grounded){
+                    if *airborne == Grounded {
                         *playerstate = Idle;
                     } else {
                         *playerstate = ControlledAirborne;
@@ -88,7 +95,7 @@ pub fn update_playerstate(
 
             // another special case~
             (GroundPound, PlayerAction::Special(_dir)) => {
-                change_facing(raw_input, &mut facing);
+                change_facing(move_x, &mut facing);
                 *playerstate = ChargedPunch;
             },
 
@@ -107,7 +114,7 @@ pub fn update_playerstate(
                 *playerstate = Interact;
             }
             (Interact, _) => {
-                if state_ticks.0 >= 8 && !raw_input.atk_held {
+                if state_ticks.0 >= 8 && !atk_held {
                     *playerstate = Interactnt;
                 }
             }
@@ -127,10 +134,10 @@ pub fn update_playerstate(
                     *playerstate = AirJump;
                     air_jumps.0 -= 1;
                     // TODO: figure out if we should change facing strictly by momentum here?
-                    change_facing(raw_input, &mut facing);
+                    change_facing(move_x, &mut facing);
                 } else if *airborne == Grounded {
                     *playerstate = Jumping;
-                    change_facing(raw_input, &mut facing);
+                    change_facing(move_x, &mut facing);
                 }
             },
             // jump debug
@@ -145,45 +152,35 @@ pub fn update_playerstate(
 
             (GroundPound, PlayerAction::None) if !status.busy => {
                 if *airborne == Grounded {
-                    match raw_input {
-                        RawInput { stick, .. } if stick.y < -0.96 => {
-                            // make this access not trigger bevy ecs "Changed<PlayerState>"
-                            *playerstate.bypass_change_detection() = SuperCrouch;
-                        },
-                        _ => {
-                            *playerstate = Idle;
-                        }
+                    if move_y < -0.96 {
+                        // make this access not trigger bevy ecs "Changed<PlayerState>"
+                        *playerstate.bypass_change_detection() = SuperCrouch;
+                    } else {
+                        *playerstate = Idle;
                     }
                 }
             }
 
             (_, PlayerAction::None) if !status.busy && *airborne == Grounded => {
-                change_facing(raw_input, &mut facing);
-                match raw_input {
-                    RawInput { stick, .. } if stick.x.abs() >= 0.3 => {
-                        *playerstate = Running
-                    },
-                    RawInput { stick, .. } if stick.y > 0.3 => {
-                        *playerstate = Lookup
-                    },
-                    RawInput { stick, .. } if stick.y < -0.96 && (state_ticks.0 >= 24 || *playerstate.as_ref() == SuperCrouch) => {
-                        if old_state.0 != SuperCrouch {
-                            *playerstate = SuperCrouch;
-                        }
-                    },
-                    RawInput { stick, .. } if stick.y < -0.3 => {
-                        *playerstate = Crouch
-                    },
-                    RawInput { stick, .. } => {
-                        *playerstate = Idle
+                change_facing(move_x, &mut facing);
+                if move_x.abs() >= 0.3 {
+                    *playerstate = Running
+                } else if move_y > 0.3 {
+                    *playerstate = Lookup
+                } else if move_y < -0.96 && (state_ticks.0 >= 24 || *playerstate.as_ref() == SuperCrouch) {
+                    if old_state.0 != SuperCrouch {
+                        *playerstate = SuperCrouch;
                     }
-                    _ => {}
+                } else if move_y < -0.3 {
+                    *playerstate = Crouch
+                } else {
+                    *playerstate = Idle
                 }
             }
 
             // airborne attack
             (_, PlayerAction::Attack(_)) if *airborne == Airborne => {
-                *playerstate = match attack_direction(raw_input, &facing) {
+                *playerstate = match attack_direction(move_x, move_y, &facing) {
                     AtkDirection::Up => { UpAir }
                     AtkDirection::Down => { DownAir }
                     AtkDirection::Back => { BackAir }
@@ -194,7 +191,7 @@ pub fn update_playerstate(
 
             // ground attack
             (_, PlayerAction::Attack(_)) if *airborne == Grounded => {
-                *playerstate = match attack_direction(raw_input, &facing) {
+                *playerstate = match attack_direction(move_x, move_y, &facing) {
                     AtkDirection::Up => { UpAir }
                     AtkDirection::Down => { DownAir }
                     AtkDirection::Back => { BackAir }
@@ -205,11 +202,11 @@ pub fn update_playerstate(
 
             // special attack
             (_, PlayerAction::Special(_)) => {
-                *playerstate = match attack_direction(raw_input, &facing) {
+                *playerstate = match attack_direction(move_x, move_y, &facing) {
                     AtkDirection::Up => { SpinMove }
                     AtkDirection::Down if *airborne != Grounded => { GroundPound }
-                    AtkDirection::Back => { change_facing(raw_input, &mut facing); ChargedPunch }
-                    AtkDirection::Fwd => { change_facing(raw_input, &mut facing); ChargedPunch }
+                    AtkDirection::Back => { change_facing(move_x, &mut facing); ChargedPunch }
+                    AtkDirection::Fwd => { change_facing(move_x, &mut facing); ChargedPunch }
                     AtkDirection::Neutral => { Roll }
                     AtkDirection::Down => { Roll } // yeah fuck you
                 }
@@ -223,9 +220,9 @@ pub fn update_playerstate(
     }
 }
 
-fn change_facing(raw_input: &RawInput, facing: &mut Facing) {
-    if raw_input.stick.x.abs() >= 0.2 {
-        *facing = match raw_input.stick.x {
+fn change_facing(move_x: f32, facing: &mut Facing) {
+    if move_x.abs() >= 0.2 {
+        *facing = match move_x {
             x if x < -0.2 => Facing::Left,
             x if x > 0.2 => Facing::Right,
             _ => *facing

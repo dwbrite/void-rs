@@ -1,9 +1,11 @@
-use bevy::app::{App, FixedUpdate, Plugin, Startup, Update};
+use bevy::app::{App, FixedUpdate, Plugin, Startup};
+use bevy::asset::AssetServer;
 use bevy::prelude::*;
+use bevy_aseprite_ultra::prelude::{Animation, AseAnimation, Aseprite};
 use bevy_rapier2d::dynamics::Velocity;
-use crate::input;
-use crate::input::{InputBuffer, RawInput};
-use crate::player::state::{sproing, AirJumpsRemaining, AirborneState, PlayerAction, PlayerState, PreviousState, StateTicks};
+use bevy_rapier2d::prelude::{ActiveEvents, Collider, LockedAxes, RigidBody};
+use crate::{AnimationIndices, AnimationTimer, PIXEL_PERFECT_LAYERS};
+use crate::player::state::{sproing, AirJumpsRemaining, AirborneState, Facing, PlayerAction, PlayerState, PreviousState, SpringMass, StateTicks};
 
 pub mod special_attacks;
 pub mod state;
@@ -31,32 +33,77 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, input::setup_player);
-        app.add_systems(Update, input::buffer_jump_input);
-        app.insert_resource(InputBuffer {
-            jump_buffered: false,
-            spec_buffered: false,
-            atk_buffered: false,
-        });
-        app.add_systems(FixedUpdate, (
-            input::read_raw_input,
-            state::detect_ground,
-            state::update_playerstate,
-            state::reset_state_ticks,
-            animation::flip_sprite,
-            animation::playerstate_animation,
-            state::reset_air_jumps,
-            state::update_playerstate_physics,
-            update_kinetic_energy,
-            sproing,
-            state::increment_state_ticks,
-        ).chain());
+        app.add_systems(Startup, setup_player)
+            .add_systems(FixedUpdate, (
+                state::detect_ground,
+                state::update_playerstate,
+                state::reset_state_ticks,
+                animation::flip_sprite,
+                animation::playerstate_animation,
+                state::reset_air_jumps,
+                state::update_playerstate_physics,
+                update_kinetic_energy,
+                sproing,
+                state::increment_state_ticks,
+            ).chain());
     }
 }
 
 #[derive(Component)]
+pub struct PlayerGamepad;
+
+fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let animation_indices = AnimationIndices { first: 0, last: 8 };
+
+    commands.spawn((
+        PlayerGamepad,
+        PlayerState::Idle,
+        AirborneState::Grounded,
+        PlayerAction::None,
+        StateTicks(0),
+        Transform::from_xyz(0.0, 60.0, 0.0),
+        animation_indices,
+        PIXEL_PERFECT_LAYERS,
+        AirJumpsRemaining(5),
+        Collider::cuboid(4.0, 5.0),
+        RigidBody::Dynamic,
+        Sprite::default(),
+    ))
+    .insert((
+        Velocity::zero(),
+        ActiveEvents::COLLISION_EVENTS,
+        LockedAxes::ROTATION_LOCKED,
+        AseAnimation {
+            aseprite: asset_server.load::<Aseprite>("gamer.aseprite"),
+            animation: Animation::tag("slide"),
+        },
+        Facing::Right,
+        PreviousState(PlayerState::Idle),
+        KineticEnergy {
+            value: 0.0,
+            peak: 0.0,
+            frames_since_loss: 0,
+        },
+        CharacterStatus {
+            busy: false,
+            no_jump: false,
+        },
+        SpringMass {
+            y: 0.0,
+            vy: 0.0,
+            k: 0.042,
+            damping: 0.40,
+            mass: 3.5,
+            last_parent_vy: 0.0,
+            parent_coupling: 0.06,
+        },
+        AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
+    ));
+}
+
+#[derive(Component)]
 pub struct CharacterStatus {
-    pub busy: bool, // when he so busy doing other shit
+    pub busy: bool,
     pub no_jump: bool,
 }
 

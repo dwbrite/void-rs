@@ -5,6 +5,7 @@
 
 mod input;
 mod player;
+mod systems;
 
 use bevy::{camera::{RenderTarget, visibility::RenderLayers}, color::palettes::css::GRAY, prelude::*, render::render_resource::Extent3d, window::WindowResized};
 use bevy::asset::ErasedAssetLoader;
@@ -72,7 +73,7 @@ use bevy_aseprite_ultra::prelude::*;
 use bevy_rapier2d::na::DimAdd;
 use bevy_rapier2d::prelude::*;
 use player::PlayerPlugin;
-use crate::input::stick_watch;
+use crate::input::InputPlugin;
 
 fn main() {
     App::new()
@@ -100,13 +101,14 @@ fn main() {
                 },
             },
         })
+        .add_plugins(InputPlugin)
         .add_plugins(PlayerPlugin)
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(26.0))
         // .add_plugins(RapierDebugRenderPlugin::default())
         .add_plugins(AsepriteUltraPlugin)
         .insert_resource(Time::<Fixed>::from_hz(128.0))
         .add_systems(Startup, (setup_camera, setup_movement_demo))
-        .add_systems(Update, (fit_canvas, animate_sprite, stick_watch))
+        .add_systems(Update, (fit_canvas, animate_sprite))
         .init_asset::<Aseprite>()
         .run();
 }

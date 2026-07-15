@@ -1,11 +1,10 @@
 use bevy::prelude::{Changed, MessageReader, Query, With};
 use bevy_rapier2d::pipeline::CollisionEvent;
-use crate::input::PlayerGamepad;
 use super::types::{AirborneState, AirJumpsRemaining};
 
 pub fn detect_ground(
     mut collision_events: MessageReader<CollisionEvent>,
-    mut player_query: Query<&mut AirborneState, With<PlayerGamepad>>,
+    mut player_query: Query<&mut AirborneState>,
 ) {
     for event in collision_events.read() {
         match event {

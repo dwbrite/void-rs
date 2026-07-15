@@ -1,7 +1,8 @@
 use bevy::prelude::Query;
 use bevy_rapier2d::dynamics::{ExternalImpulse, Velocity};
-use crate::input::RawInput;
+use crate::input::InputAction;
 use crate::player::{air_shit, special_attacks, CharacterStatus, AIR_FRICTION, AIR_JUMP_BASE_IMPULSE, AIR_SPEED};
+use crate::systems::input::ActionMap;
 use super::types::{AirJumpsRemaining, Facing, PlayerState, StateTicks};
 
 const GROUND_FRICTION: f32 = 0.6;
@@ -11,8 +12,13 @@ const GROUND_FRICTION: f32 = 0.6;
 
 use PlayerState::*;
 
-pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &RawInput, &AirJumpsRemaining, &Facing, &mut Velocity, &mut CharacterStatus)>) {
-    for (mut state, state_ticks, raw_input, air_jumps, facing, mut velocity, mut status) in &mut query {
+pub fn update_playerstate_physics(
+    input_map: bevy::prelude::Res<ActionMap<InputAction>>,
+    mut query: Query<(&PlayerState, &StateTicks, &AirJumpsRemaining, &Facing, &mut Velocity, &mut CharacterStatus)>
+) {
+    let move_x = input_map.value(InputAction::MoveX);
+    let move_y = input_map.value(InputAction::MoveY);
+    for (mut state, state_ticks, air_jumps, facing, mut velocity, mut status) in &mut query {
         let di_multiplier = match state {
             UpAir => (1.0, 1.0),
             DownAir => (0.8, 0.8),
@@ -22,14 +28,14 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
             _ => (1.0, 1.0),
         };
 
-        match &*state {
+        match state {
             state if state.has_ground_physics() => {
                 status.busy = false;
                 status.no_jump = false;
 
-                if raw_input.stick.x.abs() >= 0.25 {
+                if move_x.abs() >= 0.25 {
                         velocity.linear.x *= GROUND_FRICTION;
-                        velocity.linear.x = raw_input.stick.x * 48.;
+                        velocity.linear.x = move_x * 48.;
                 }
             }
             SuperJump => {
@@ -40,7 +46,7 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
                     velocity.linear.y = AIR_JUMP_BASE_IMPULSE*2.0;
 
                     // Prioritize player intent on jump start to avoid carrying stale ground momentum.
-                    velocity.linear.x = 120. * raw_input.stick.x;
+                    velocity.linear.x = 120. * move_x;
                 }
 
                 if state_ticks.0 >= 15 {
@@ -50,7 +56,7 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
                 if state_ticks.0 >= 100 || velocity.linear.y < 30.0 {
                     status.no_jump = false;
                 }
-                aerial_movement(&raw_input, &mut velocity, di_multiplier);
+                aerial_movement(move_x, &mut velocity, di_multiplier);
             }
             Jumping => {
                 if state_ticks.0 == 0 {
@@ -60,7 +66,7 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
                     velocity.linear.y = AIR_JUMP_BASE_IMPULSE;
 
                     // Prioritize player intent on jump start to avoid carrying stale ground momentum.
-                    velocity.linear.x = 80. * raw_input.stick.x;
+                    velocity.linear.x = 80. * move_x;
                 }
 
                 if state_ticks.0 >= 10 {
@@ -70,12 +76,12 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
                 if state_ticks.0 >= 100 || velocity.linear.y < 30.0 {
                     status.no_jump = false;
                 }
-                aerial_movement(&raw_input, &mut velocity, di_multiplier);
+                aerial_movement(move_x, &mut velocity, di_multiplier);
             }
             AirJump => {
                 status.busy = true;
                 status.no_jump = true;
-                air_shit::air_jump_phys(state, &state_ticks, &raw_input, air_jumps, &mut velocity, &mut status);
+                air_shit::air_jump_phys(&state, &state_ticks, move_x, move_y, air_jumps, &mut velocity, &mut status);
 
                 if state_ticks.0 >= 6 {
                     status.busy = false;
@@ -87,12 +93,12 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
             UpAir | DownAir | FwdAir | BackAir | NeutralAir => {
                 status.busy = true ;
                 status.no_jump = true;
-                aerial_movement(&raw_input, &mut velocity, di_multiplier);
+                aerial_movement(move_x, &mut velocity, di_multiplier);
             },
             ControlledAirborne => {
                 status.busy = false;
                 status.no_jump = false;
-                aerial_movement(&raw_input, &mut velocity, di_multiplier);
+                aerial_movement(move_x, &mut velocity, di_multiplier);
             }
             SpinMove => {
                 status.busy = true;
@@ -103,7 +109,7 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
             ChargedPunch => {
                 status.busy = true;
                 status.no_jump = true;
-                special_attacks::side_special_phys(state, state_ticks, raw_input, *facing, &mut velocity);
+                special_attacks::side_special_phys(&state, state_ticks, *facing, move_x, move_y, &mut velocity);
 
                 if state_ticks.0 > 80 {
                     status.busy = false;
@@ -124,9 +130,9 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
 
                 // TODO: replace raw input threshold with a var/component or something idfk
                 // - maybe stick tuning shit
-                if raw_input.stick.x.abs() >= 0.25 {
+                if move_x.abs() >= 0.25 {
                     velocity.linear.x *= GROUND_FRICTION;
-                    velocity.linear.x = raw_input.stick.x * 48.;
+                    velocity.linear.x = move_x * 48.;
                 }
 
                 velocity.linear.y *= 0.99;
@@ -146,9 +152,9 @@ pub fn update_playerstate_physics(mut query: Query<(&PlayerState, &StateTicks, &
     }
 }
 
-pub(crate) fn aerial_movement(raw_input: &RawInput, velocity: &mut Velocity, di_multiplier: (f32, f32)) {
+pub(crate) fn aerial_movement(move_x: f32, velocity: &mut Velocity, di_multiplier: (f32, f32)) {
     let apex_boost = (1.0 - velocity.linear.y.abs() / 20.0).clamp(0.0, 1.0);
 
     velocity.linear.x *= AIR_FRICTION;
-    velocity.linear.x += raw_input.stick.x * di_multiplier.0 * AIR_SPEED * (1.0 + 0.4 * apex_boost);
+    velocity.linear.x += move_x * di_multiplier.0 * AIR_SPEED * (1.0 + 0.4 * apex_boost);
 }
