@@ -37,6 +37,40 @@ pub enum RollDir {
     Ccw,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Octant {
+    East, Northeast, North, Northwest, West, Southwest, South, Southeast
+}
+
+impl Octant {
+    pub fn from_oct(v: u8) -> Octant {
+        match v {
+            0 => Octant::East,
+            1 => Octant::Northeast,
+            2 => Octant::North,
+            3 => Octant::Northwest,
+            4 => Octant::West,
+            5 => Octant::Southwest,
+            6 => Octant::South,
+            7 => Octant::Southeast,
+            _ => panic!("Invalid octant value: {}", v),
+        }
+    }
+
+    pub fn to_u8(&self, octant: Octant) -> u8 {
+        match octant {
+            Octant::East => 0,
+            Octant::Northeast => 1,
+            Octant::North => 2,
+            Octant::Northwest => 3,
+            Octant::West => 4,
+            Octant::Southwest => 5,
+            Octant::South => 6,
+            Octant::Southeast => 7,
+        }
+    }
+}
+
 /// Names every readable signal. Because this is a plain value type, a binding
 /// can always be backtraced to the physical control (or stick gesture) that
 /// feeds it -- rebind menus and "press any input" capture read these directly.
@@ -50,7 +84,7 @@ pub enum SignalId {
     StickMagnitude(Stick),
     /// Pulses to 1.0 for one frame when a tap lands in this octant.
     /// Octant 0 is centered on +X (east), counting counter-clockwise.
-    OctantTap { stick: Stick, octant: u8 },
+    OctantTap { stick: Stick, octant: Octant },
     /// Angular speed of a stick roll, normalized: 1.0 == `roll_max_rpm`.
     Roll { stick: Stick, dir: RollDir },
 }

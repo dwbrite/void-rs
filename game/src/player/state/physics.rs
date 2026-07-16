@@ -11,14 +11,16 @@ const GROUND_FRICTION: f32 = 0.6;
 
 
 use PlayerState::*;
+use crate::player::air_shit::air_jump_phys;
+use crate::player::state::AirborneState;
 
 pub fn update_playerstate_physics(
     input_map: bevy::prelude::Res<ActionMap<InputAction>>,
-    mut query: Query<(&PlayerState, &StateTicks, &AirJumpsRemaining, &Facing, &mut Velocity, &mut CharacterStatus)>
+    mut query: Query<(&PlayerState, &StateTicks, &AirJumpsRemaining, &Facing, &mut Velocity, &mut CharacterStatus, &AirborneState)>
 ) {
     let move_x = input_map.value(InputAction::MoveX);
     let move_y = input_map.value(InputAction::MoveY);
-    for (mut state, state_ticks, air_jumps, facing, mut velocity, mut status) in &mut query {
+    for (mut state, state_ticks, air_jumps, facing, mut velocity, mut status, airborne) in &mut query {
         let di_multiplier = match state {
             UpAir => (1.0, 1.0),
             DownAir => (0.8, 0.8),
@@ -93,7 +95,16 @@ pub fn update_playerstate_physics(
             UpAir | DownAir | FwdAir | BackAir | NeutralAir => {
                 status.busy = true ;
                 status.no_jump = true;
-                aerial_movement(move_x, &mut velocity, di_multiplier);
+
+                if *state == UpAir && *airborne == AirborneState::Grounded {
+                    // fake it till you make it lmao
+                    air_shit::air_jump_phys(&state, &state_ticks, move_x, move_y, &AirJumpsRemaining(1), &mut velocity, &mut status);
+                } else {
+                    match airborne {
+                        AirborneState::Airborne => aerial_movement(move_x, &mut velocity, di_multiplier),
+                        AirborneState::Grounded => aerial_movement(move_x, &mut velocity, (0.8, 1.0)),
+                    }
+                }
             },
             ControlledAirborne => {
                 status.busy = false;
@@ -142,7 +153,7 @@ pub fn update_playerstate_physics(
                 status.busy = true;
             }
             Interactnt => {
-                status.busy = true;
+                status.busy = false;
             }
             _ => {
                 status.busy = false;

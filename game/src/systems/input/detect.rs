@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::f32::consts::TAU;
 
 use super::config::DetectorConfig;
-use super::signal::{RollDir, Signal, SignalId, Stick};
+use super::signal::{Octant, RollDir, Signal, SignalId, Stick};
 
 const BUTTONS: &[GamepadButton] = &[
     GamepadButton::South,
@@ -142,7 +142,7 @@ fn tick_stick(
     };
     for oct in 0..8u8 {
         let v = if fired == Some(oct) { 1.0 } else { 0.0 };
-        out.push((SignalId::OctantTap { stick, octant: oct }, v));
+        out.push((SignalId::OctantTap { stick, octant: Octant::from_oct(oct) }, v));
     }
 
     // --- Roll: smoothed angular velocity, normalized to max_rpm ---

@@ -79,6 +79,9 @@ pub fn playerstate_animation(
             PlayerState::DownAir if ticks.0 == 0 => {
                 animation.animation = Animation::tag("downair").with_repeat(Count(2));
             }
+            PlayerState::SpinMove if ticks.0 == 0 => {
+                animation.animation = Animation::tag("downair").with_repeat(Loop);
+            }
             PlayerState::NeutralAir => {
                 animation.animation = Animation::tag("basic punch").with_repeat(Count(0));
             }

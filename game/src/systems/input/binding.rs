@@ -6,7 +6,7 @@ use bevy::input::gamepad::{GamepadAxis, GamepadButton};
 use bevy::prelude::*;
 
 use super::detect::{InputSignals, PadSignals};
-use super::signal::{RollDir, SignalId, Stick};
+use super::signal::{Octant, RollDir, SignalId, Stick};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum DeviceFilter {
@@ -77,7 +77,7 @@ impl Binding {
     pub fn axis(a: GamepadAxis) -> Self {
         Self::new(SignalId::Axis(a))
     }
-    pub fn tap(stick: Stick, octant: u8) -> Self {
+    pub fn tap(stick: Stick, octant: Octant) -> Self {
         Self::new(SignalId::OctantTap { stick, octant })
     }
     pub fn roll(stick: Stick, dir: RollDir) -> Self {

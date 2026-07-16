@@ -4,7 +4,7 @@ use bevy::prelude::{Changed, Entity, MessageReader, Query, ResMut};
 use bevy::tasks::futures_lite::StreamExt;
 use bevy_aseprite_ultra::prelude::{AnimationEvents, AseAnimation};
 use bevy_rapier2d::dynamics::Velocity;
-use crate::input::InputAction;
+use crate::input::{AttackControl, InputAction};
 use crate::player::{CharacterStatus, AIR_JUMP_DURATION};
 use crate::player::state::{AirborneState, Facing, PreviousState};
 use crate::player::state::AirborneState::{Airborne, Grounded};
@@ -15,20 +15,139 @@ use crate::systems::input::ActionMap;
 
 // TODO: track how much we've been jumping around - let lil chud catch his breath over a few seconds, with heavy breathing to light breathing.
 // TODO: once he's caught his breath, if he's bored he can look around, look down at the ground, kick dirt, etc. various idle animations bc fuck yeah.
+// TODO: down-b charge into side-spec for bonus momentum
+
+const BUFFER_WINDOW: f32 = 0.1;
+const SUPER_CROUCH_CHARGE_TICKS: u32 = 24;
+const SUPER_JUMP_LOCK_TICKS: u32 = 20;
+const INTERACT_MIN_TICKS: u32 = 8;
+
+
+/// Named fields instead of a 10-wide tuple. Iteration yields
+/// `PlayerQueryItem`, so everything below is `p.state`, `p.facing`, etc.
+#[derive(QueryData)]
+#[query_data(mutable)]
+pub struct PlayerQuery {
+    entity: Entity,
+    state: &'static mut PlayerState,
+    action: &'static mut PlayerAction,
+    air_jumps: &'static mut AirJumpsRemaining,
+    state_ticks: &'static StateTicks, // was `mut` before, but never written here
+    airborne: &'static AirborneState,
+    old_state: &'static mut PreviousState,
+    velocity: &'static Velocity,
+    facing: &'static mut Facing,
+    status: &'static CharacterStatus,
+}
+
 
 
 use PlayerState::*;
 use crate::player::state::transitions::AtkDirection::{Fwd, Neutral};
 use bevy::ecs::change_detection::DetectChangesMut;
+use bevy::ecs::query::QueryData;
+use crate::input::AttackControl::MoveXY;
+use crate::player::state::AtkDirection::{Back, Down, Up};
+use crate::player::state::PlayerAction::SpinAttack;
 
-
-enum AtkDirection {
+#[derive(Copy, Clone, Debug)]
+pub enum AtkDirection {
     Up,
     Down,
     Back,
     Fwd,
     Neutral,
 }
+
+/// Cardinal (c-stick style) direction. North/South are absolute;
+/// East/West are interpreted relative to facing, so East while facing
+/// left is a *back* attack.
+fn cardinal_direction(control: AttackControl, facing: &Facing) -> AtkDirection {
+    match control {
+        AttackControl::North => Up,
+        AttackControl::South => Down,
+        AttackControl::East if facing.sign() > 0.0 => Fwd,
+        AttackControl::East => Back,
+        AttackControl::West if facing.sign() > 0.0 => Back,
+        AttackControl::West => Fwd,
+        AttackControl::Neutral => AtkDirection::Neutral,
+        AttackControl::MoveXY => unreachable!("MoveXY resolves via attack_direction"),
+    }
+}
+
+fn pressed_or_buffered(map: &mut ActionMap<InputAction>, busy: bool, action: InputAction) -> bool {
+    map.just_pressed(action) || (!busy && map.buffered_press(action, BUFFER_WINDOW))
+}
+
+/// Checks every binding of one action family (`InputAction::Attack` or
+/// `InputAction::Special` — pass the enum constructor) and resolves the
+/// direction it implies. Cardinal bindings win over MoveXY: the c-stick
+/// is the more explicit input, so it overrides stick DI.
+fn resolve_directional(
+    map: &mut ActionMap<InputAction>,
+    busy: bool,
+    facing: &Facing,
+    move_x: f32,
+    move_y: f32,
+    family: fn(AttackControl) -> InputAction,
+) -> Option<AtkDirection> {
+    use AttackControl::*;
+    for control in [North, South, East, West, Neutral] {
+        if pressed_or_buffered(map, busy, family(control)) {
+            return Some(cardinal_direction(control, facing));
+        }
+    }
+    if pressed_or_buffered(map, busy, family(MoveXY)) {
+        return Some(attack_direction(move_x, move_y, facing));
+    }
+    None
+}
+
+
+struct FrameInput {
+    move_x: f32,
+    move_y: f32,
+    attack_held: bool,
+    action: PlayerAction,
+}
+
+impl FrameInput {
+    fn read(map: &mut ActionMap<InputAction>, facing: &Facing, busy: bool) -> Self {
+        let move_x = map.value(InputAction::MoveX);
+        let move_y = map.value(InputAction::MoveY);
+
+        // Priority: Jump > Special > Attack, same as before.
+        // (Jump is deliberately unbuffered; consider buffering it too —
+        // it's a common QoL win for inputs a few frames before landing.)
+        let action = if map.just_pressed(InputAction::Jump) {
+            PlayerAction::Jump
+        } else if let Some(dir) = resolve_directional(map, busy, facing, move_x, move_y, InputAction::Special) {
+            PlayerAction::Special(dir)
+        } else if let Some(dir) = resolve_directional(map, busy, facing, move_x, move_y, InputAction::Attack) {
+            PlayerAction::Attack(dir)
+        } else if map.is_down(InputAction::Spin) {
+            PlayerAction::SpinAttack
+        } else {
+            PlayerAction::None
+        };
+
+        Self {
+            move_x,
+            move_y,
+            attack_held: map.is_down(InputAction::Attack(AttackControl::MoveXY)),
+            action,
+        }
+    }
+}
+
+/// The state you fall back to when an attack/animation/jump finishes.
+fn neutral_state(airborne: AirborneState) -> PlayerState {
+    match airborne {
+        Grounded => Idle,
+        Airborne => ControlledAirborne,
+    }
+}
+
 
 pub fn attack_direction(move_x: f32, move_y: f32, facing: &Facing) -> AtkDirection {
     match (move_x, move_y) {
@@ -42,7 +161,7 @@ pub fn attack_direction(move_x: f32, move_y: f32, facing: &Facing) -> AtkDirecti
 
 pub fn update_playerstate(
     mut animation_events: MessageReader<AnimationEvents>,
-    mut query: Query<(Entity, &mut PlayerState, &mut PlayerAction, &mut AirJumpsRemaining, &mut StateTicks, &AirborneState, &mut PreviousState, &Velocity, &mut Facing, &CharacterStatus)>,
+    mut query: Query<PlayerQuery>,
     mut input_map: ResMut<ActionMap<InputAction>>,
 ) {
     let finished: HashSet<Entity> = animation_events
@@ -53,196 +172,174 @@ pub fn update_playerstate(
         })
         .collect();
 
-    // TODO: down-b charge into side-spec for bonus momentum
-    for (entity, mut playerstate, mut playeraction, mut air_jumps, mut state_ticks, airborne, mut old_state, velocity, mut facing, status) in &mut query {
-        let move_x = input_map.value(InputAction::MoveX);
-        let move_y = input_map.value(InputAction::MoveY);
-        let jump_pressed = input_map.just_pressed(InputAction::Jump);
-        let spec_pressed = input_map.just_pressed(InputAction::Special);
-        let spec_buffered = !status.busy && input_map.buffered_press(InputAction::Special, 0.1);
-        let spec_pressed = spec_pressed || spec_buffered;
-        let atk_pressed = input_map.just_pressed(InputAction::Attack);
-        let atk_buffered = !status.busy && input_map.buffered_press(InputAction::Attack, 0.1);
-        let atk_pressed = atk_pressed || atk_buffered;
-        let atk_held = input_map.is_down(InputAction::Attack);
+    for mut p in &mut query {
+        let input = FrameInput::read(&mut input_map, &p.facing, p.status.busy);
+        *p.action = input.action;
 
-        *playeraction = if jump_pressed {
-            PlayerAction::Jump
-        } else if spec_pressed {
-            PlayerAction::Special(Vec2::new(move_x, move_y))
-        } else if atk_pressed {
-            PlayerAction::Attack(Vec2::new(move_x, move_y))
-        } else {
-            PlayerAction::None
-        };
+        let start_state = PreviousState(*p.state);
+        let anim_finished = finished.contains(&p.entity);
+        let airborne = *p.airborne;
 
-        let start_state = PreviousState(*playerstate);
-        match (&*playerstate, &*playeraction) {
-            (SuperCrouch, PlayerAction::Jump) if state_ticks.0 >= 24 => {
-                *playerstate = SuperJump;
-            }
+        match (*p.state, *p.action) {
+            // -------- state-specific overrides (checked first) --------
+            (SuperCrouch, PlayerAction::Jump)
+            if p.state_ticks.0 >= SUPER_CROUCH_CHARGE_TICKS =>
+                {
+                    *p.state = SuperJump;
+                }
 
-            (SuperJump, _) if status.busy || state_ticks.0 <= 20 => {
-                // this is here for a reason I think
-            }
+            // SuperJump lockout: swallow all inputs until the jump has
+            // played out. Intentionally empty.
+            (SuperJump, _) if p.status.busy || p.state_ticks.0 <= SUPER_JUMP_LOCK_TICKS => {}
 
-            // special case for our special boy :^)
+            // ChargedPunch rides until we're falling fast or grounded.
             (ChargedPunch, _) => {
-                if !status.busy && (velocity.linear.y < -30.0 || *airborne == Grounded){
-                    if *airborne == Grounded {
-                        *playerstate = Idle;
-                    } else {
-                        *playerstate = ControlledAirborne;
-                    }
+                let falling_fast = p.velocity.linear.y < -30.0;
+                if !p.status.busy && (falling_fast || airborne == Grounded) {
+                    *p.state = neutral_state(airborne);
                 }
-            },
-
-            // another special case~
-            (GroundPound, PlayerAction::Special(_dir)) => {
-                match attack_direction(move_x, move_y, &facing) {
-                    AtkDirection::Back | AtkDirection::Fwd => {
-                        change_facing(move_x, &mut facing);
-                        *playerstate = ChargedPunch;
-                    }
-                    _ => {}
-                }
-            },
-
-            // attacks/animations that are complete upon animation completion
-            (UpAir | DownAir | FwdAir | BackAir| Jumping, PlayerAction::None) if finished.contains(&entity) => {
-                match airborne {
-                    Airborne => {
-                        *playerstate = ControlledAirborne;
-                    }
-                    Grounded => {
-                        *playerstate = Idle;
-                    }
-                }
-            },
-            (NeutralAir, _) if finished.contains(&entity) => {
-                *playerstate = Interact;
             }
+
+            // GroundPound cancels into ChargedPunch on a horizontal special.
+            (GroundPound, PlayerAction::Special(Back | Fwd)) => {
+                change_facing(input.move_x, &mut p.facing);
+                *p.state = ChargedPunch;
+            }
+            (PlayerState::SpinMove, PlayerAction::None) => {
+                *p.state = neutral_state(airborne);
+            }
+
+            // -------- animation-completion exits --------
+            (UpAir | SpinMove | FwdAir | BackAir | Jumping, PlayerAction::None)
+            if anim_finished =>
+                {
+                    *p.state = neutral_state(airborne);
+                }
+            (NeutralAir, _) if anim_finished => *p.state = Interact,
             (Interact, _) => {
-                if state_ticks.0 >= 8 && !atk_held {
-                    *playerstate = Interactnt;
+                if p.state_ticks.0 >= INTERACT_MIN_TICKS && !input.attack_held {
+                    *p.state = Interactnt;
                 }
             }
-            (Interactnt, _) if finished.contains(&entity) => {
-                match airborne {
-                    Airborne => {
-                        *playerstate = ControlledAirborne;
-                    }
-                    Grounded => {
-                        *playerstate = Idle;
-                    }
+            (Interactnt, _) if anim_finished => *p.state = neutral_state(airborne),
+
+            // -------- jumps --------
+            (_, PlayerAction::Jump) if !p.status.no_jump && !p.status.busy => match airborne {
+                Airborne if p.air_jumps.0 > 0 => {
+                    p.air_jumps.0 -= 1;
+                    // TODO: change facing strictly by momentum here?
+                    change_facing(input.move_x, &mut p.facing);
+                    *p.state = AirJump;
                 }
-            }
-            // jump
-            (_, PlayerAction::Jump) if !status.no_jump && !status.busy => {
-                if *airborne == Airborne && air_jumps.0 > 0 {
-                    *playerstate = AirJump;
-                    air_jumps.0 -= 1;
-                    // TODO: figure out if we should change facing strictly by momentum here?
-                    change_facing(move_x, &mut facing);
-                } else if *airborne == Grounded {
-                    *playerstate = Jumping;
-                    change_facing(move_x, &mut facing);
+                Grounded => {
+                    change_facing(input.move_x, &mut p.facing);
+                    *p.state = Jumping;
                 }
+                _ => {} // airborne, out of air jumps
             },
-            // jump debug
             (state, PlayerAction::Jump) => {
-                println!("jump blocked in state: {:?}, air_jumps: {}", state, air_jumps.0);
-            },
-
-            // once initial jump lock ends, hand over to fully controllable airborne state
-            (Jumping | AirJump | SuperJump, PlayerAction::None) if *airborne == Airborne && !status.busy => {
-                *playerstate = ControlledAirborne;
-            },
-
-            (GroundPound, PlayerAction::None) if !status.busy => {
-                if *airborne == Grounded {
-                    if move_y < -0.96 {
-                        // make this access not trigger bevy ecs "Changed<PlayerState>"
-                        *playerstate.bypass_change_detection() = SuperCrouch;
-                    } else {
-                        *playerstate = Idle;
-                    }
-                }
+                println!("jump blocked in state: {state:?}, air_jumps: {}", p.air_jumps.0);
             }
 
-            (_, PlayerAction::None) if !status.busy && *airborne == Grounded => {
-                change_facing(move_x, &mut facing);
-                if move_x.abs() >= 0.3 {
-                    *playerstate = Running
-                } else if move_y > 0.3 {
-                    *playerstate = Lookup
-                } else if move_y < -0.96 && (state_ticks.0 >= 24 || *playerstate.as_ref() == SuperCrouch) {
-                    if old_state.0 != SuperCrouch {
-                        *playerstate = SuperCrouch;
-                    }
-                } else if move_y < -0.3 {
-                    *playerstate = Crouch
+            // Initial jump lock over: hand control back.
+            (Jumping | AirJump | SuperJump, PlayerAction::None)
+            if airborne == Airborne && !p.status.busy =>
+                {
+                    *p.state = ControlledAirborne;
+                }
+
+            (GroundPound, PlayerAction::None) if !p.status.busy && airborne == Grounded => {
+                if input.move_y < -0.96 {
+                    // DELIBERATE: bypassing change detection keeps
+                    // reset_state_ticks from firing, so a landed ground
+                    // pound carries its ticks into SuperCrouch --
+                    // down-B -> hold down -> super jump charge is already
+                    // done. Do not "fix" this into a normal write.
+                    *p.state.bypass_change_detection() = SuperCrouch;
                 } else {
-                    *playerstate = Idle
+                    *p.state = Idle;
                 }
             }
 
-            // airborne attack
-            (_, PlayerAction::Attack(_)) if *airborne == Airborne => {
-                *playerstate = match attack_direction(move_x, move_y, &facing) {
-                    AtkDirection::Up => { UpAir }
-                    AtkDirection::Down => { DownAir }
-                    AtkDirection::Back => { BackAir }
-                    AtkDirection::Fwd => { FwdAir }
-                    AtkDirection::Neutral => { NeutralAir }
-                }
+            // -------- grounded movement --------
+            (_, PlayerAction::None) if !p.status.busy && airborne == Grounded => {
+                change_facing(input.move_x, &mut p.facing);
+                let next = if input.move_x.abs() >= 0.3 {
+                    Running
+                } else if input.move_y > 0.3 {
+                    Lookup
+                } else if input.move_y < -0.96
+                    && (p.state_ticks.0 >= SUPER_CROUCH_CHARGE_TICKS || *p.state == SuperCrouch)
+                {
+                    SuperCrouch
+                } else if input.move_y < -0.3 {
+                    Crouch
+                } else {
+                    Idle
+                };
+                // Only writes (and only fires Changed<PlayerState>) when the
+                // state actually changes -- replaces the old_state guard.
+                p.state.set_if_neq(next);
             }
 
-            // ground attack
-            (_, PlayerAction::Attack(_)) if *airborne == Grounded => {
-                *playerstate = match attack_direction(move_x, move_y, &facing) {
-                    AtkDirection::Up => { UpAir }
-                    AtkDirection::Down => { DownAir }
-                    AtkDirection::Back => { BackAir }
-                    AtkDirection::Fwd => { FwdAir }
-                    AtkDirection::Neutral => { NeutralAir }
-                }
+            (_, PlayerAction::SpinAttack) => {
+                *p.state = SpinMove;
             }
 
-            // special attack
-            (_, PlayerAction::Special(_)) => {
-                *playerstate = match attack_direction(move_x, move_y, &facing) {
-                    AtkDirection::Up => { SpinMove }
-                    AtkDirection::Down if *airborne != Grounded => { GroundPound }
-                    AtkDirection::Back => { change_facing(move_x, &mut facing); ChargedPunch }
-                    AtkDirection::Fwd => { change_facing(move_x, &mut facing); ChargedPunch }
-                    AtkDirection::Neutral => { Roll }
-                    AtkDirection::Down => { Roll } // yeah fuck you
-                }
+            // -------- attacks --------
+            // NOTE: air and ground attacks currently share the aerial
+            // states on purpose-for-now; split this arm when ground
+            // attacks get their own states.
+            (_, PlayerAction::Attack(dir)) => {
+                *p.state = match dir {
+                    Up => UpAir,
+                    Down => UpAir, // TODO: replace me with something
+                    Back => BackAir,
+                    Fwd => FwdAir,
+                    AtkDirection::Neutral => NeutralAir,
+                };
             }
-            _ if *airborne == Grounded && !status.busy => *playerstate = Idle,
-            _ if *airborne == Airborne && !status.busy => *playerstate = ControlledAirborne,
+
+            (_, PlayerAction::Special(dir)) => {
+                *p.state = match dir {
+                    Up => SpinMove,
+                    Down if airborne != Grounded => GroundPound,
+                    Back | Fwd => {
+                        change_facing(input.move_x, &mut p.facing);
+                        ChargedPunch
+                    }
+                    // grounded down-special and neutral both roll
+                    Down | AtkDirection::Neutral => Roll,
+                };
+            }
+
+            // -------- fallthrough --------
+            _ if !p.status.busy => *p.state = neutral_state(airborne),
             _ => {}
         }
 
-        *old_state = start_state;
+        *p.old_state = start_state;
     }
 }
+
 
 fn change_facing(move_x: f32, facing: &mut Facing) {
-    if move_x.abs() >= 0.2 {
-        *facing = match move_x {
-            x if x < -0.2 => Facing::Left,
-            x if x > 0.2 => Facing::Right,
-            _ => *facing
-        };
+    if move_x < -0.2 {
+        *facing = Facing::Left;
+    } else if move_x > 0.2 {
+        *facing = Facing::Right;
     }
 }
 
-pub fn reset_state_ticks(mut query: Query<(&mut StateTicks, &PreviousState, &PlayerState), Changed<PlayerState>>) {
+
+pub fn reset_state_ticks(
+    mut query: Query<(&mut StateTicks, &PreviousState, &PlayerState), Changed<PlayerState>>,
+) {
     for (mut ticks, prestate, state) in &mut query {
+        // With set_if_neq in the movement arm, Changed<PlayerState> should
+        // only fire on real transitions -- this check is now belt-and-braces.
         if prestate.0 != *state {
-            println!("reset state tick: {:?}, state: {:?} -> {:?}", ticks, prestate.0, state);
+            println!("reset state ticks: {ticks:?}, {:?} -> {state:?}", prestate.0);
             ticks.0 = 0;
         }
     }

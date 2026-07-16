@@ -1,6 +1,10 @@
 use bevy::prelude::{Component, Query};
 use bevy::math::Vec2;
 use bevy_rapier2d::prelude::Velocity;
+use crate::input::{AttackControl, InputAction};
+use crate::player::state::AtkDirection;
+use crate::player::state::AtkDirection::{Back, Down, Fwd, Up};
+use crate::systems::input::ActionMap;
 
 #[derive(Component, Debug)]
 pub struct StateTicks(pub u32);
@@ -20,13 +24,13 @@ impl Facing {
     }
 }
 
-#[derive(Component, Debug, PartialEq)]
+#[derive(Component, Copy, Clone, Debug, PartialEq)]
 pub enum AirborneState {
     Grounded,
     Airborne,
 }
 
-#[derive(Component)]
+#[derive(Component, Copy, Clone, Debug, PartialEq)]
 pub struct AirJumpsRemaining(pub u32);
 
 #[derive(Component, Debug, PartialEq, Copy, Clone)]
@@ -91,16 +95,20 @@ impl PlayerState {
 #[derive(Component, Debug)]
 pub struct PreviousState(pub PlayerState);
 
-#[derive(Component, Debug)]
+#[derive(Component, Copy, Clone, Debug)]
 pub enum PlayerAction {
     Jump,
-    Attack(Vec2),
-    Special(Vec2),
+    Attack(AtkDirection),
+    Special(AtkDirection),
+    SpinAttack,
     Grab,
     Dodge,
     None,
 }
 
+
+
+// TODO: move this?
 #[derive(Component, Debug)]
 pub struct SpringMass {
     pub y: f32, // spring-mass displacement

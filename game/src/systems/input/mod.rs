@@ -55,6 +55,7 @@ impl<A: ActionLike> Plugin for GameInputPlugin<A> {
 mod example {
     use super::*;
     use bevy::input::gamepad::{GamepadAxis, GamepadButton};
+    use crate::systems::input::signal::Octant::North;
 
     #[derive(Clone, Copy, PartialEq, Eq, Hash)]
     enum Action {
@@ -73,7 +74,7 @@ mod example {
         // Jump: A button, OR a tap in the "up" octant (octant 2 = north),
         // OR (the insane one) the left-right axis past 0.75 either way.
         map.bind(Action::Jump, Binding::button(GamepadButton::South));
-        map.bind(Action::Jump, Binding::tap(Stick::Left, 2));
+        map.bind(Action::Jump, Binding::tap(Stick::Left, North));
         map.bind(
             Action::Jump,
             Binding::axis(GamepadAxis::LeftStickX)
