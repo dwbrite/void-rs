@@ -108,36 +108,27 @@ fn main() {
         .add_plugins(AsepriteUltraPlugin)
         .insert_resource(Time::<Fixed>::from_hz(128.0))
         .add_systems(Startup, (setup_camera, setup_movement_demo))
-        .add_systems(Update, (fit_canvas, animate_sprite))
+        .add_systems(Update, fit_canvas)
         .init_asset::<Aseprite>()
         .run();
 }
 
-fn setup_movement_demo(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<ColorMaterial>>) {
+fn setup_movement_demo(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<ColorMaterial>>, asset_server: Res<AssetServer>) {
     commands.spawn((
         PIXEL_PERFECT_LAYERS,
-        Transform::from_xyz(0.0, -120., 0.0),
-        Mesh2d(meshes.add(Rectangle::new(640.0, 120.0))),
+        // Keep floor visuals behind gameplay sprites on the same render layer.
+        Transform::from_xyz(0.0, -60.0, -10.0),
+        Mesh2d(meshes.add(Rectangle::new(640.0, 1.0))),
         MeshMaterial2d(materials.add(Color::srgb(0.122, 0.082, 0.247))),
-        Collider::cuboid(320.0, 60.0),
+        Collider::cuboid(320.0, 0.5),
         RigidBody::Fixed,
+        // AseAnimation {
+        //     animation: "tag".into(),
+        //     aseprite: asset_server.load("test-backdrop.aseprite"),
+        // },
+        // AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
+        // Sprite::default(),
     ));
-}
-
-fn animate_sprite(
-    time: Res<Time>,
-    mut query: Query<(&AnimationIndices, &mut AnimationTimer, &mut Sprite)>,
-) {
-    for (animation_indices, mut timer, mut sprite) in &mut query {
-        timer.tick(time.delta());
-        if timer.just_finished() && let Some(atlas) = &mut sprite.texture_atlas {
-            atlas.index = if atlas.index == animation_indices.last {
-                animation_indices.first
-            } else {
-                atlas.index + 1
-            }
-        }
-    }
 }
 
 

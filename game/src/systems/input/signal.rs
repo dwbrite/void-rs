@@ -82,9 +82,11 @@ pub enum SignalId {
     Axis(GamepadAxis),
     /// Deadzoned stick magnitude (0..1).
     StickMagnitude(Stick),
-    /// Pulses to 1.0 for one frame when a tap lands in this octant.
-    /// Octant 0 is centered on +X (east), counting counter-clockwise.
-    OctantTap { stick: Stick, octant: Octant },
+
     /// Angular speed of a stick roll, normalized: 1.0 == `roll_max_rpm`.
     Roll { stick: Stick, dir: RollDir },
+
+    TapDeflect { stick: Stick, octant: Octant },
+    TapRelease { stick: Stick, octant: Octant },
+    DeflectRelease { stick: Stick, octant: Octant },
 }

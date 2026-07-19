@@ -7,7 +7,7 @@ use bevy_aseprite_ultra::prelude::AnimationRepeat::{Count, Loop};
 use bevy_rapier2d::prelude::Velocity;
 use crate::input::InputAction;
 use crate::player::AIR_SPEED;
-use crate::player::state::{Facing, PlayerState, SpringMass, StateTicks};
+use crate::player::state::{spin_input_speed, Facing, PlayerState, SpringMass, StateTicks};
 use crate::systems::input::ActionMap;
 
 pub fn flip_sprite(mut query: Query<(&Facing, &mut Sprite), Changed<Facing>>) {
@@ -23,7 +23,7 @@ pub fn playerstate_animation(
     let move_y = input_map.value(InputAction::MoveY);
     for (playerstate, mut animation, velocity, ticks, spring) in &mut query {
         match playerstate {
-            PlayerState::Idle | PlayerState::Running => {
+            PlayerState::Idle | PlayerState::Running | PlayerState::SmashDrop => {
                 match spring.y {
                     y if y >= -10.0 && playerstate == &PlayerState::Running => { animation.animation = Animation::tag("run").with_speed(abs(velocity.linear.x / 56.0)); }
                     y if y > 5.0 => { animation.animation = Animation::tag("lookup1"); }
@@ -76,11 +76,15 @@ pub fn playerstate_animation(
             PlayerState::FwdAir => { // TODO: find out if fwd air is... supposed to be... resettable?
                 animation.animation = Animation::tag("air kick").with_repeat(Count(0));
             }
-            PlayerState::DownAir if ticks.0 == 0 => {
-                animation.animation = Animation::tag("downair").with_repeat(Count(2));
+            PlayerState::PreDownKick if ticks.0 == 0 => {
+                animation.animation = Animation::tag("predkick").with_repeat(Count(0));
             }
-            PlayerState::SpinMove if ticks.0 == 0 => {
-                animation.animation = Animation::tag("downair").with_repeat(Loop);
+            PlayerState::DownKick if ticks.0 == 0 => {
+                animation.animation = Animation::tag("dkick").with_repeat(Count(3));
+            }
+            PlayerState::SpinMove(speed) => {
+                let live = spin_input_speed(&input_map);
+                animation.animation = Animation::tag("downair").with_repeat(Loop).with_speed(3.0*live + 0.4);
             }
             PlayerState::NeutralAir => {
                 animation.animation = Animation::tag("basic punch").with_repeat(Count(0));
@@ -97,6 +101,9 @@ pub fn playerstate_animation(
             PlayerState::UpAir if ticks.0 == 0 => {
                 animation.animation = Animation::tag("upkick").with_repeat(Count(0));
             }
+            // PlayerState::SmashDrop if ticks.0 == 0 => {
+            //     animation.animation = Animation::tag("smashdrop").with_repeat(Count(0));
+            // }
             PlayerState::ControlledAirborne => {
                 match velocity.linear.y {
                     y if y > 110.0 => animation.animation = Animation::tag("jumpfast"),
@@ -112,6 +119,9 @@ pub fn playerstate_animation(
             }
             PlayerState::SuperJump if ticks.0 == 0 => {
                 animation.animation = Animation::tag("superjump").with_repeat(AnimationRepeat::Count(0));
+            }
+            PlayerState::PreJump if ticks.0 == 0 => {
+                animation.animation = Animation::tag("prejump").with_repeat(Count(0));
             }
             PlayerState::Jumping if ticks.0 == 0 => {
                 animation.animation = Animation::tag("jumpfast").with_repeat(AnimationRepeat::Count(0));

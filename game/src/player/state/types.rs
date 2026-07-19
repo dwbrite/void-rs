@@ -52,6 +52,7 @@ pub enum PlayerState {
     GroundTech,
     WallTech,
 
+    PreJump,
     Jumping,
     AirJump,
     AirDodge,
@@ -63,8 +64,11 @@ pub enum PlayerState {
     SmashDash,
     SmashDrop,
 
+    PreDownKick,
+    DownKick,
+
     UpAir,
-    DownAir,
+    // DownAir,
     FwdAir,
     BackAir,
     NeutralAir,
@@ -77,7 +81,7 @@ pub enum PlayerState {
     BackAtk,
     NeutralAtk,
 
-    SpinMove,
+    SpinMove(f32),
     GroundPound,
     ChargedPunch,
     Roll,
@@ -100,10 +104,11 @@ pub enum PlayerAction {
     Jump,
     Attack(AtkDirection),
     Special(AtkDirection),
-    SpinAttack,
+    SpinAttack(f32),
     Grab,
     Dodge,
     None,
+    DropDown,
 }
 
 

@@ -20,6 +20,11 @@ pub struct DetectorConfig {
     pub roll_max_rpm: f32,
     /// Time constant (seconds) for smoothing the roll velocity estimate.
     pub roll_smoothing: f32,
+
+    pub flick_rest_radius: f32,        // 0.15 — "the stick has started moving"; just above deadzone
+    pub flick_rise_time: f32,          // 0.05 — ≈3 ticks; rise faster than this = "fast"
+    pub spring_min_hold: f32,          // = tap_max_hold; shorter holds can't be a deflect-release
+    pub spring_max_release_time: f32,  // 0.066 — edge → center within ~4 ticks counts as a "spring"
 }
 
 impl Default for DetectorConfig {
@@ -30,8 +35,12 @@ impl Default for DetectorConfig {
             tap_max_hold: 0.20,
             tap_release_radius: 0.3,
             roll_min_radius: 0.5,
-            roll_max_rpm: 180.0,
+            roll_max_rpm: 1000.0,
             roll_smoothing: 0.05,
+            flick_rest_radius: 0.25,
+            flick_rise_time: 0.05,
+            spring_min_hold: 0.5, // TODO: rename this shit
+            spring_max_release_time: 0.066,
         }
     }
 }

@@ -15,7 +15,10 @@ impl<T: Copy + Eq + Hash + Send + Sync + 'static> ActionLike for T {}
 
 #[derive(Clone, Copy, Default, Debug)]
 struct ActionState {
+    /// Processed action value after binding processors have been applied.
     value: f32,
+    /// Raw action value from the underlying signal before processors.
+    raw_value: f32,
     held: bool,
     pressed_this_frame: bool,
     /// Timestamp of the most recent press edge; consumed by buffered reads.
@@ -58,10 +61,13 @@ impl<A: ActionLike> ActionMap<A> {
         self.bindings.get(&action).map(Vec::as_slice).unwrap_or(&[])
     }
 
-    /// Combined analog value across all bindings (max by magnitude,
-    /// so signed axes survive alongside 0..1 sources).
+    /// Combined analog value across all bindings after processors are applied.
     pub fn value(&self, action: A) -> f32 {
         self.state.get(&action).map(|s| s.value).unwrap_or(0.0)
+    }
+    /// Combined analog value across all bindings before processors are applied.
+    pub fn raw_value(&self, action: A) -> f32 {
+        self.state.get(&action).map(|s| s.raw_value).unwrap_or(0.0)
     }
     pub fn is_down(&self, action: A) -> bool {
         self.state.get(&action).map(|s| s.held).unwrap_or(false)
@@ -97,13 +103,18 @@ pub(crate) fn evaluate_actions<A: ActionLike>(
     let release_t = map.release_threshold;
 
     let ActionMap { bindings, state, .. } = &mut *map;
-    for (action, binds) in bindings.iter() {
+    for (action, binds) in bindings.iter_mut() {
+        let raw_value = binds
+            .iter_mut()
+            .map(|b| b.eval_raw(&sig))
+            .fold(0.0, |acc: f32, v| if v.abs() > acc.abs() { v } else { acc });
         let value = binds
-            .iter()
+            .iter_mut()
             .map(|b| b.eval(&sig))
             .fold(0.0, |acc: f32, v| if v.abs() > acc.abs() { v } else { acc });
 
         let st = state.entry(*action).or_default();
+        st.raw_value = raw_value;
         st.value = value;
         st.pressed_this_frame = false;
         let mag = value.abs();

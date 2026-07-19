@@ -22,6 +22,7 @@ pub enum InputAction {
     Jump,
     Special(AttackControl),
     Attack(AttackControl),
+    DropDown,
     Spin,
     MoveX,
     MoveY,
@@ -48,16 +49,29 @@ fn setup_bindings(mut map: ResMut<ActionMap<InputAction>>) {
     map.bind(InputAction::Attack(MoveXY), Binding::button(GamepadButton::South));
 
     map.bind(InputAction::Attack(North), Binding::tap(Stick::Right, Octant::North).with(Processor::Threshold(0.1)));
-    // map.bind(InputAction::Attack(South), Binding::tap(Stick::Right, Octant::South).with(Processor::Threshold(0.1)));
     map.bind(InputAction::Attack(East), Binding::tap(Stick::Right, Octant::East).with(Processor::Threshold(0.1)));
     map.bind(InputAction::Attack(West), Binding::tap(Stick::Right, Octant::West).with(Processor::Threshold(0.1)));
+    // south-attack has two parts
+    // map.bind(InputAction::Attack(South), Binding::tap(Stick::Right, Octant::South).with(Processor::Threshold(0.1)));
+    map.bind(InputAction::Attack(South), Binding::axis(GamepadAxis::RightStickY).with(Processor::Negate).with(Processor::Threshold(0.9)));
+
+    let b = Binding::button(GamepadButton::South);
 
     // Roll c-stick to spin:
-    map.bind(InputAction::Spin, Binding::roll(Stick::Right, Ccw).with(Processor::Threshold(0.2)));
-    map.bind(InputAction::Spin, Binding::roll(Stick::Right, Cw).with(Processor::Threshold(0.2)));
+    map.bind(InputAction::Spin, Binding::roll(Stick::Right, Ccw)
+        .with(Processor::Threshold(0.120))
+        .with(Processor::DownSlew { from: 0.0, slew: 0.03})
+        .with(Processor::UpSlew { from: 0.0, slew: 0.07}));
+    map.bind(InputAction::Spin, Binding::roll(Stick::Right, Cw)
+        .with(Processor::Threshold(0.120))
+        .with(Processor::DownSlew { from: 0.0, slew: 0.03})
+        .with(Processor::UpSlew { from: 0.0, slew: 0.07}));
 
     // Motion: direct analog sticks.
     map.bind(InputAction::MoveX, Binding::axis(GamepadAxis::LeftStickX));
     map.bind(InputAction::MoveY, Binding::axis(GamepadAxis::LeftStickY));
+
+    // Drop down fast
+    map.bind(InputAction::DropDown, Binding::tap(Stick::Left, Octant::South).with(Processor::Threshold(0.1)));
 }
 

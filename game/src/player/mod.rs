@@ -3,7 +3,7 @@ use bevy::asset::AssetServer;
 use bevy::prelude::*;
 use bevy_aseprite_ultra::prelude::{Animation, AseAnimation, Aseprite};
 use bevy_rapier2d::dynamics::Velocity;
-use bevy_rapier2d::prelude::{ActiveEvents, Collider, LockedAxes, RigidBody};
+use bevy_rapier2d::prelude::{ActiveEvents, Ccd, Collider, GravityScale, LockedAxes, RigidBody};
 use crate::{AnimationIndices, AnimationTimer, PIXEL_PERFECT_LAYERS};
 use crate::player::state::{sproing, AirJumpsRemaining, AirborneState, Facing, PlayerAction, PlayerState, PreviousState, SpringMass, StateTicks};
 
@@ -53,16 +53,16 @@ impl Plugin for PlayerPlugin {
 pub struct PlayerGamepad;
 
 fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let animation_indices = AnimationIndices { first: 0, last: 8 };
+    // let animation_indices = AnimationIndices { first: 0, last: 8 };
 
     commands.spawn((
         PlayerGamepad,
         PlayerState::Idle,
-        AirborneState::Grounded,
+        AirborneState::Airborne,
         PlayerAction::None,
         StateTicks(0),
         Transform::from_xyz(0.0, 60.0, 0.0),
-        animation_indices,
+        // animation_indices,
         PIXEL_PERFECT_LAYERS,
         AirJumpsRemaining(5),
         Collider::cuboid(4.0, 5.0),
@@ -87,6 +87,12 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
         CharacterStatus {
             busy: false,
             no_jump: false,
+            holding_jump: false,
+            ticks_since_landed: 0,
+            spin_can_float: false,
+            spin_float_used: false,
+            was_spinning: false,
+            spin_fall_ticks: 0,
         },
         SpringMass {
             y: 0.0,
@@ -98,6 +104,8 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
             parent_coupling: 0.06,
         },
         AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
+        Ccd::enabled(),
+        GravityScale(1.0),
     ));
 }
 
@@ -105,6 +113,13 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
 pub struct CharacterStatus {
     pub busy: bool,
     pub no_jump: bool,
+    pub holding_jump: bool,
+    pub ticks_since_landed: u32,
+
+    pub spin_can_float: bool,   // decided at spin entry, constant for the spin
+    pub spin_float_used: bool,  // once per airtime; cleared on Grounded (unchanged)
+    pub was_spinning: bool,     // edge detector for spin entry
+    pub spin_fall_ticks: u32,   // ticks spent in the descending phase of the current spin float
 }
 
 #[derive(Component)]

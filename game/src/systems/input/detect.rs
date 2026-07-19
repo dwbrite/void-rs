@@ -34,19 +34,36 @@ const BUTTONS: &[GamepadButton] = &[
 // Per-pad state
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Flick detection
+// ---------------------------------------------------------------------------
+
 #[derive(Default)]
-enum TapState {
+enum FlickState {
     #[default]
     Idle,
+    /// Left rest, hasn't hit full deflection yet. Timing the rise.
+    Rising { start: f32 },
     Deflected {
-        start: f32,
-        octant: u8,
+        /// When we crossed `tap_min_displacement`.
+        crossed: f32,
+        /// Octant locked at edge-arrival — hysteresis for tap gestures.
+        locked_octant: u8,
+        /// Octant tracked during the hold — long holds may rotate, and
+        /// deflect-release should report where the stick *was*, not where
+        /// it entered.
+        cur_octant: u8,
+        /// Rise time was <= flick_rise_time.
+        fast: bool,
+        /// When mag last dipped below the edge (springback timing).
+        /// None while pinned at the edge.
+        left_edge: Option<f32>,
     },
 }
 
 #[derive(Default)]
 struct StickDetector {
-    tap: TapState,
+    flick: FlickState,
     last_angle: Option<f32>,
     /// Smoothed angular velocity in rad/s. Positive = CCW.
     omega: f32,
@@ -118,31 +135,90 @@ fn tick_stick(
     let mag = v.length();
     let angle = v.y.atan2(v.x);
 
-    // --- Tap: default all 8 octant pulses to 0, override on fire ---
-    let mut fired: Option<u8> = None;
-    det.tap = match std::mem::take(&mut det.tap) {
-        TapState::Idle => {
+    // --- Flicks: three gestures from one state machine ---
+    //
+    // NOTE for binding-capture UI: one physical gesture can fire multiple
+    // signals (fast flick+release fires TapDeflect *and* TapRelease). Bindings
+    // filter to one signal so this is fine in play, but a "press input to
+    // bind" listener should collect candidates for ~tap_max_hold after the
+    // first fire and let the player disambiguate. Don't "fix" it here.
+    let mut tap_deflect: Option<u8> = None;
+    let mut tap_release: Option<u8> = None;
+    let mut deflect_release: Option<u8> = None;
+
+    det.flick = match std::mem::take(&mut det.flick) {
+        FlickState::Idle => {
             if mag >= cfg.tap_min_displacement {
-                // Octant locks at first crossing: free hysteresis.
-                TapState::Deflected { start: now, octant: octant_of(angle) }
+                // 0 -> edge in a single tick: trivially fast.
+                let oct = octant_of(angle);
+                tap_deflect = Some(oct); // (1) fires on arrival, zero latency
+                FlickState::Deflected {
+                    crossed: now,
+                    locked_octant: oct,
+                    cur_octant: oct,
+                    fast: true,
+                    left_edge: None,
+                }
+            } else if mag > cfg.flick_rest_radius {
+                FlickState::Rising { start: now }
             } else {
-                TapState::Idle
+                FlickState::Idle
             }
         }
-        TapState::Deflected { start, octant } => {
-            if now - start > cfg.tap_max_hold {
-                TapState::Idle // held too long; it's a hold, not a tap
-            } else if mag <= cfg.tap_release_radius {
-                fired = Some(octant);
-                TapState::Idle
+
+        FlickState::Rising { start } => {
+            if mag >= cfg.tap_min_displacement {
+                let fast = now - start <= cfg.flick_rise_time;
+                let oct = octant_of(angle);
+                if fast {
+                    tap_deflect = Some(oct); // (1) fires on arrival
+                }
+                FlickState::Deflected {
+                    crossed: now,
+                    locked_octant: oct,
+                    cur_octant: oct,
+                    fast,
+                    left_edge: None,
+                }
+            } else if mag <= cfg.flick_rest_radius {
+                FlickState::Idle // wiggled and gave up; never reached the edge
             } else {
-                TapState::Deflected { start, octant }
+                FlickState::Rising { start }
+            }
+        }
+
+        FlickState::Deflected { crossed, locked_octant, mut cur_octant, fast, mut left_edge } => {
+            let held = now - crossed;
+
+            if mag <= cfg.tap_release_radius {
+                // Back at center: classify the exit.
+                if fast && held <= cfg.tap_max_hold {
+                    tap_release = Some(locked_octant); // (2)
+                } else if held >= cfg.spring_min_hold
+                    && left_edge.map_or(true, |t| now - t <= cfg.spring_max_release_time)
+                {
+                    deflect_release = Some(cur_octant); // (3)
+                }
+                // else: slow ease back to neutral — no gesture, on purpose.
+                FlickState::Idle
+            } else {
+                if mag >= cfg.tap_min_displacement {
+                    left_edge = None;               // (re)pinned to the edge
+                    cur_octant = octant_of(angle);  // track rotation during hold
+                } else if left_edge.is_none() {
+                    left_edge = Some(now);          // started coming off the edge
+                }
+
+                FlickState::Deflected { crossed, locked_octant, cur_octant, fast, left_edge }
             }
         }
     };
+
     for oct in 0..8u8 {
-        let v = if fired == Some(oct) { 1.0 } else { 0.0 };
-        out.push((SignalId::OctantTap { stick, octant: Octant::from_oct(oct) }, v));
+        let o = Octant::from_oct(oct);
+        out.push((SignalId::TapDeflect     { stick, octant: o }, (tap_deflect     == Some(oct)) as u8 as f32));
+        out.push((SignalId::TapRelease     { stick, octant: o }, (tap_release     == Some(oct)) as u8 as f32));
+        out.push((SignalId::DeflectRelease { stick, octant: o }, (deflect_release == Some(oct)) as u8 as f32));
     }
 
     // --- Roll: smoothed angular velocity, normalized to max_rpm ---

@@ -27,22 +27,30 @@ pub enum Processor {
     /// Zero out small values (per-binding, on top of the stick deadzone).
     Deadzone(f32),
     Remap { from: (f32, f32), to: (f32, f32) },
+    DownSlew {
+        from: f32,
+        slew: f32,
+    },
+    UpSlew {
+        from: f32,
+        slew: f32,
+    },
 }
 
 impl Processor {
-    fn apply(self, v: f32) -> f32 {
+    fn apply(&mut self, v: f32) -> f32 {
         match self {
             Processor::Abs => v.abs(),
             Processor::Negate => -v,
             Processor::Threshold(t) => {
-                if v >= t {
+                if v >= *t {
                     1.0
                 } else {
                     0.0
                 }
             }
             Processor::Deadzone(d) => {
-                if v.abs() <= d {
+                if v.abs() <= *d {
                     0.0
                 } else {
                     v
@@ -55,6 +63,38 @@ impl Processor {
                     0.0
                 };
                 to.0 + t.clamp(0.0, 1.0) * (to.1 - to.0)
+            }
+            Processor::DownSlew { from, slew } => {
+                // Only allow the value to move downward toward lower magnitudes.
+                // If the target is already lower than the current state, snap to it.
+                // Otherwise, decay by at most `slew` per step.
+                if *from <= v {
+                    *from = v;
+                } else {
+                    let delta = v - *from;
+                    if delta.abs() <= *slew {
+                        *from = v;
+                    } else {
+                        *from += delta.signum() * *slew;
+                    }
+                }
+                *from
+            }
+            Processor::UpSlew { from, slew } => {
+                // Only allow the value to move upward toward higher magnitudes.
+                // If the target is already higher than the current state, snap to it.
+                // Otherwise, increase by at most `slew` per step.
+                if *from >= v {
+                    *from = v;
+                } else {
+                    let delta = v - *from;
+                    if delta.abs() <= *slew {
+                        *from = v;
+                    } else {
+                        *from += delta.signum() * *slew;
+                    }
+                }
+                *from
             }
         }
     }
@@ -78,7 +118,13 @@ impl Binding {
         Self::new(SignalId::Axis(a))
     }
     pub fn tap(stick: Stick, octant: Octant) -> Self {
-        Self::new(SignalId::OctantTap { stick, octant })
+        Self::new(SignalId::TapDeflect { stick, octant })
+    }
+    pub fn tap_release(stick: Stick, octant: Octant) -> Self {
+        Self::new(SignalId::TapRelease { stick, octant })
+    }
+    pub fn deflect_release(stick: Stick, octant: Octant) -> Self {
+        Self::new(SignalId::DeflectRelease { stick, octant })
     }
     pub fn roll(stick: Stick, dir: RollDir) -> Self {
         Self::new(SignalId::Roll { stick, dir })
@@ -92,7 +138,7 @@ impl Binding {
         self
     }
 
-    pub(crate) fn eval(&self, sig: &InputSignals) -> f32 {
+    pub(crate) fn eval(&mut self, sig: &InputSignals) -> f32 {
         let read = |ps: &PadSignals| ps.get(self.signal).value;
         let raw = match self.device {
             DeviceFilter::Pad(e) => sig.pads.get(&e).map(read).unwrap_or(0.0),
@@ -102,6 +148,18 @@ impl Binding {
                 .map(read)
                 .fold(0.0, |acc: f32, v| if v.abs() > acc.abs() { v } else { acc }),
         };
-        self.processors.iter().fold(raw, |v, p| p.apply(v))
+        self.processors.iter_mut().fold(raw, |v, p| p.apply(v))
+    }
+
+    pub(crate) fn eval_raw(&mut self, sig: &InputSignals) -> f32 {
+        let read = |ps: &PadSignals| ps.get(self.signal).value;
+        match self.device {
+            DeviceFilter::Pad(e) => sig.pads.get(&e).map(read).unwrap_or(0.0),
+            DeviceFilter::Any => sig
+                .pads
+                .values()
+                .map(read)
+                .fold(0.0, |acc: f32, v| if v.abs() > acc.abs() { v } else { acc }),
+        }
     }
 }
