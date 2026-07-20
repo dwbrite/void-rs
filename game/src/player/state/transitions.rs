@@ -21,7 +21,7 @@ const BUFFER_WINDOW: f32 = 0.1;
 const SUPER_CROUCH_CHARGE_TICKS: u32 = 24;
 const SUPER_JUMP_LOCK_TICKS: u32 = 12;
 const JUMP_LOCKED_TICKS: u32 = 4;
-const INTERACT_MIN_TICKS: u32 = 8;
+const INTERACT_MIN_TICKS: u32 = 0;
 
 
 /// Named fields instead of a 10-wide tuple. Iteration yields
@@ -339,7 +339,14 @@ pub fn update_playerstate(
                 *p.state = match dir {
                     Up => UpAir,
                     Down => PreDownKick,
-                    Back => BackAir,
+                    Back => {
+                        if matches!(airborne, Grounded) {
+                            change_facing(input.move_x, &mut p.facing);
+                            FwdAir
+                        } else {
+                            BackAir
+                        }
+                    },
                     Fwd => FwdAir,
                     AtkDirection::Neutral => NeutralAir,
                 };

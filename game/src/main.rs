@@ -113,21 +113,31 @@ fn main() {
         .run();
 }
 
-fn setup_movement_demo(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<ColorMaterial>>, asset_server: Res<AssetServer>) {
+fn setup_movement_demo(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    _asset_server: Res<AssetServer>,
+) {
     commands.spawn((
         PIXEL_PERFECT_LAYERS,
-        // Keep floor visuals behind gameplay sprites on the same render layer.
-        Transform::from_xyz(0.0, -60.0, -10.0),
-        Mesh2d(meshes.add(Rectangle::new(640.0, 1.0))),
-        MeshMaterial2d(materials.add(Color::srgb(0.122, 0.082, 0.247))),
+        Transform::from_xyz(0.0, -60.0, 0.0),
+        // Mesh2d(meshes.add(Rectangle::new(640.0, 1.0))),
+        // MeshMaterial2d(materials.add(Color::srgb(0.122, 0.082, 0.247))),
         Collider::cuboid(320.0, 0.5),
         RigidBody::Fixed,
-        // AseAnimation {
-        //     animation: "tag".into(),
-        //     aseprite: asset_server.load("test-backdrop.aseprite"),
-        // },
+    ));
+
+    // Keep backdrop sprite separate from the mesh/collider floor entity.
+    commands.spawn((
+        PIXEL_PERFECT_LAYERS,
+        Transform::from_xyz(0.0, -42.0, 1.0),
+        AseAnimation {
+            animation: "tag".into(),
+            aseprite: _asset_server.load("test-backdrop.aseprite"),
+        },
         // AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
-        // Sprite::default(),
+        Sprite::default(),
     ));
 }
 
