@@ -31,14 +31,14 @@ impl Default for DetectorConfig {
     fn default() -> Self {
         Self {
             stick_deadzone: 0.15,
-            tap_min_displacement: 0.6,
+            tap_min_displacement: 0.8,
             tap_max_hold: 0.20,
             tap_release_radius: 0.3,
-            roll_min_radius: 0.5,
+            roll_min_radius: 0.9,
             roll_max_rpm: 1000.0,
             roll_smoothing: 0.05,
             flick_rest_radius: 0.25,
-            flick_rise_time: 0.05,
+            flick_rise_time: 0.02,
             spring_min_hold: 0.5, // TODO: rename this shit
             spring_max_release_time: 0.066,
         }

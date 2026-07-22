@@ -70,7 +70,7 @@ impl<A: ActionLike> ActionMap<A> {
         self.state.get(&action).map(|s| s.raw_value).unwrap_or(0.0)
     }
     pub fn is_down(&self, action: A) -> bool {
-        self.state.get(&action).map(|s| s.held).unwrap_or(false)
+        self.state.get(&action).map(|s| s.held || s.pressed_this_frame).unwrap_or(false)
     }
     pub fn just_pressed(&self, action: A) -> bool {
         self.state.get(&action).map(|s| s.pressed_this_frame).unwrap_or(false)

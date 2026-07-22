@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use bevy::math::Vec2;
-use bevy::prelude::{Changed, Entity, MessageReader, Query, ResMut};
+use bevy::prelude::{Changed, Component, Entity, MessageReader, Query, ResMut};
 use bevy::tasks::futures_lite::StreamExt;
 use bevy_aseprite_ultra::prelude::{Animation, AnimationEvents, AseAnimation};
 use bevy_rapier2d::dynamics::Velocity;
@@ -18,10 +18,19 @@ use crate::systems::input::ActionMap;
 // TODO: down-b charge into side-spec for bonus momentum
 
 const BUFFER_WINDOW: f32 = 0.1;
+const JUMP_BUFFER_WINDOW: f32 = 0.15;
 const SUPER_CROUCH_CHARGE_TICKS: u32 = 24;
 const SUPER_JUMP_LOCK_TICKS: u32 = 12;
 const JUMP_LOCKED_TICKS: u32 = 4;
 const INTERACT_MIN_TICKS: u32 = 0;
+
+
+#[derive(Component, Debug)]
+pub enum AnimationStatus {
+    Finished,
+    Playing,
+    Looped, // boundary of start/end
+}
 
 
 /// Named fields instead of a 10-wide tuple. Iteration yields
@@ -40,6 +49,31 @@ pub struct PlayerQuery {
     facing: &'static mut Facing,
     status: &'static mut CharacterStatus,
     spring_mass: &'static SpringMass,
+    animation_status: &'static mut AnimationStatus,
+    animation: &'static AseAnimation,
+}
+
+pub fn update_animation_status(
+    mut query: Query<PlayerQuery>,
+    mut animation_events: MessageReader<AnimationEvents>)
+{
+    let finished: HashSet<Entity> = animation_events
+        .read()
+        .filter_map(|e| match e {
+            AnimationEvents::Finished(entity) => Some(*entity),
+            _ => None,
+        })
+        .collect();
+
+    for mut p in &mut query {
+        if finished.contains(&p.entity) {
+            *p.animation_status = AnimationStatus::Finished;
+            return;
+        }
+        if !(*p.state == *&p.old_state.0) {
+            *p.animation_status = AnimationStatus::Playing;
+        }
+    }
 }
 
 
@@ -49,6 +83,7 @@ use crate::player::state::transitions::AtkDirection::{Fwd, Neutral};
 use bevy::ecs::change_detection::DetectChangesMut;
 use bevy::ecs::query::QueryData;
 use crate::input::AttackControl::{MoveXY, South};
+use crate::player::state::AnimationStatus::{Finished, Playing};
 use crate::player::state::AtkDirection::{Back, Down, Up};
 use crate::player::state::PlayerAction::SpinAttack;
 
@@ -78,7 +113,7 @@ fn cardinal_direction(control: AttackControl, facing: &Facing) -> AtkDirection {
 }
 
 fn pressed_or_buffered(map: &mut ActionMap<InputAction>, busy: bool, action: InputAction) -> bool {
-    map.just_pressed(action) || (!busy && map.buffered_press(action, BUFFER_WINDOW))
+    (!busy && map.buffered_press(action, BUFFER_WINDOW)) || map.just_pressed(action)
 }
 
 /// Checks every binding of one action family (`InputAction::Attack` or
@@ -128,9 +163,9 @@ impl FrameInput {
         let move_y = map.value(InputAction::MoveY);
 
         // Priority: Jump > Special > Attack, same as before.
-        // (Jump is deliberately unbuffered; consider buffering it too —
-        // it's a common QoL win for inputs a few frames before landing.)
-        let action = if map.just_pressed(InputAction::Jump) {
+        let action = if map.just_pressed(InputAction::Jump)
+            || (!busy && map.buffered_press(InputAction::Jump, JUMP_BUFFER_WINDOW))
+        {
             PlayerAction::Jump
         } else if let Some(dir) = resolve_directional(map, busy, facing, move_x, move_y, InputAction::Special) {
             PlayerAction::Special(dir)
@@ -140,6 +175,8 @@ impl FrameInput {
             PlayerAction::SpinAttack(spin_input_speed(map))
         } else if map.is_down(InputAction::DropDown) {
             PlayerAction::DropDown
+        } else if map.is_down(InputAction::Dash){
+            PlayerAction::Dash
         } else {
             PlayerAction::None
         };
@@ -154,9 +191,21 @@ impl FrameInput {
 }
 
 /// The state you fall back to when an attack/animation/jump finishes.
-fn neutral_state(airborne: AirborneState) -> PlayerState {
+fn neutral_state(airborne: AirborneState, input: &FrameInput, facing: &mut Facing) -> PlayerState {
     match airborne {
-        Grounded => Idle,
+        Grounded => {
+            change_facing(input.move_x, facing);
+            let next = if input.move_x.abs() >= 0.3 {
+                Running
+            } else if input.move_y > 0.3 {
+                Lookup
+            } else if input.move_y < -0.3 {
+                Crouch
+            } else {
+                Idle
+            };
+            next
+        },
         Airborne => ControlledAirborne,
     }
 }
@@ -173,20 +222,16 @@ pub fn attack_direction(move_x: f32, move_y: f32, facing: &Facing) -> AtkDirecti
 }
 
 pub fn update_playerstate(
-    mut animation_events: MessageReader<AnimationEvents>,
     mut query: Query<PlayerQuery>,
     mut input_map: ResMut<ActionMap<InputAction>>,
 ) {
-    let finished: HashSet<Entity> = animation_events
-        .read()
-        .filter_map(|e| match e {
-            AnimationEvents::Finished(entity) => Some(*entity),
-            _ => None,
-        })
-        .collect();
-
     for mut p in &mut query {
-        let input = FrameInput::read(&mut input_map, &p.facing, p.status.busy);
+        let input_locked = p.status.busy
+            || matches!(*p.state, DashFlop | Interact | Interactnt)
+            || (matches!(*p.state, Jumping)   && p.state_ticks.0 <= JUMP_LOCKED_TICKS)
+            || (matches!(*p.state, SuperJump) && p.state_ticks.0 <= SUPER_JUMP_LOCK_TICKS);
+        let input = FrameInput::read(&mut input_map, &p.facing, input_locked);
+
         *p.action = input.action;
 
         if !input_map.is_down(InputAction::Jump) {
@@ -194,8 +239,8 @@ pub fn update_playerstate(
         }
 
         let start_state = PreviousState(*p.state);
-        let anim_finished = finished.contains(&p.entity);
         let airborne = *p.airborne;
+        let anim_finished = matches!(*p.animation_status, AnimationStatus::Finished);
 
         match (*p.state, *p.action) {
             // -------- state-specific overrides (checked first) --------
@@ -203,6 +248,37 @@ pub fn update_playerstate(
                 if anim_finished || !p.status.holding_jump  {
                     *p.state = Jumping;
                 }
+            }
+
+            (BackAir, _) if airborne == Grounded && p.state_ticks.0 >= 4 && p.state_ticks.0 <= 48 => {
+                *p.facing = match *p.facing {
+                    Facing::Left => Facing::Right,
+                    Facing::Right => Facing::Left,
+                };
+                *p.state = Slide;
+            }
+
+            (UpAir, _) if airborne == Grounded && p.state_ticks.0 >= 4 => {
+                *p.state = DashFlop2;
+            }
+
+            (DashFlop | DashFlop2, action) => {
+                let ticks = p.state_ticks.0;
+                if ticks >= 32 {
+                    *p.state = match action {
+                        PlayerAction::Attack(_) => {
+                            *p.facing = match *p.facing {
+                                Facing::Left => Facing::Right,
+                                Facing::Right => Facing::Left,
+                            };
+                            UpAir
+                        }
+                        PlayerAction::None => DashFlop,
+                        _ => neutral_state(airborne, &input, &mut p.facing),
+                    };
+                }
+
+                // otherwise we're doing _nothing_
             }
 
             (SuperCrouch, PlayerAction::Jump) if p.state_ticks.0 >= SUPER_CROUCH_CHARGE_TICKS => {
@@ -221,7 +297,7 @@ pub fn update_playerstate(
             (ChargedPunch, PlayerAction::None) => {
                 let falling_fast = p.velocity.linear.y < -30.0;
                 if !p.status.busy && (falling_fast || airborne == Grounded) {
-                    *p.state = neutral_state(airborne);
+                    *p.state = neutral_state(airborne, &input, &mut p.facing);
                 }
             }
 
@@ -232,7 +308,7 @@ pub fn update_playerstate(
             }
 
             (PlayerState::SpinMove(speed), PlayerAction::None) => {
-                *p.state = neutral_state(airborne);
+                *p.state = neutral_state(airborne, &input, &mut p.facing);
             }
 
             (PlayerState::PreDownKick, PlayerAction::None) => {
@@ -241,24 +317,46 @@ pub fn update_playerstate(
                 }
             }
 
+            (UpAir, PlayerAction::Attack(Back)) if p.state_ticks.0 > 12 => {
+                *p.state = BackAir;
+            }
+
             // -------- animation-completion exits --------
             (UpAir | FwdAir | BackAir | Jumping, PlayerAction::None)
             if anim_finished =>
                 {
-                    *p.state = neutral_state(airborne);
+                    *p.state = neutral_state(airborne, &input, &mut p.facing);
                 }
-            (NeutralAir, _) if anim_finished => *p.state = Interact,
+            (NeutralAir, _) => *p.state = Interact,
             (Interact, _) => {
-                if p.state_ticks.0 >= INTERACT_MIN_TICKS && !input.attack_held {
+                if !input.attack_held {
                     *p.state = Interactnt;
                 }
             }
-            (Interactnt, _) if anim_finished => *p.state = neutral_state(airborne),
+            (Interactnt, _) if anim_finished => *p.state = neutral_state(airborne, &input, &mut p.facing),
 
             (ControlledAirborne, PlayerAction::DropDown) => {
                 if p.velocity.linear.y > -AIR_JUMP_BASE_IMPULSE {
-                    *p.state = SmashDrop;
+                    *p.state = FlickDrop;
                 }
+            }
+
+            (Slide, action) => {
+                *p.state = match action {
+                    PlayerAction::Attack(_) => {
+                        UpAir
+                    }
+                    PlayerAction::Jump => {
+                        Jumping
+                    }
+                    _ => {
+                        if p.velocity.linear.x.abs() <= 1.0 && p.state_ticks.0 >= 16 {
+                            neutral_state(airborne, &input, &mut p.facing)
+                        } else {
+                            Slide
+                        }
+                    }
+                };
             }
 
             // -------- jumps --------
@@ -281,6 +379,11 @@ pub fn update_playerstate(
                 }
                 _ => {} // airborne, out of air jumps
             },
+
+            (_, PlayerAction::Dash) if !p.status.busy && matches!(airborne, Grounded) => {
+                change_facing(input.move_x, &mut p.facing);
+                *p.state = FlickDash;
+            }
             (state, PlayerAction::Jump) => {
                 println!("jump blocked in state: {state:?}, air_jumps: {}", p.air_jumps.0);
             }
@@ -307,6 +410,9 @@ pub fn update_playerstate(
 
             // -------- grounded movement --------
             (_, PlayerAction::None) if !p.status.busy && airborne == Grounded => {
+
+
+
                 change_facing(input.move_x, &mut p.facing);
                 let next = if input.move_x.abs() >= 0.3 {
                     Running
@@ -325,7 +431,7 @@ pub fn update_playerstate(
                 p.state.set_if_neq(next);
             }
 
-            (_, PlayerAction::SpinAttack(speed)) => {
+            (_, PlayerAction::SpinAttack(speed)) if !p.status.busy => {
                 if !matches!(*p.state, SpinMove(_)) {
                     *p.state = SpinMove(speed);
                 }
@@ -338,7 +444,12 @@ pub fn update_playerstate(
             (_, PlayerAction::Attack(dir)) if !p.status.busy => {
                 *p.state = match dir {
                     Up => UpAir,
-                    Down => PreDownKick,
+                    Down => {
+                        match *p.state {
+                            SuperCrouch if p.state_ticks.0 >= SUPER_CROUCH_CHARGE_TICKS => SuperJump,
+                            _ => PreDownKick,
+                        }
+                    },
                     Back => {
                         if matches!(airborne, Grounded) {
                             change_facing(input.move_x, &mut p.facing);
@@ -347,26 +458,36 @@ pub fn update_playerstate(
                             BackAir
                         }
                     },
-                    Fwd => FwdAir,
-                    AtkDirection::Neutral => NeutralAir,
+                    Fwd => {
+                        if matches!(airborne, Grounded) && p.velocity.linear.x.abs() > 64.0 {
+                            DashFlop
+                        } else {
+                            FwdAir
+                        }
+                    },
+                    Neutral => NeutralAir,
                 };
             }
 
             (_, PlayerAction::Special(dir)) if !p.status.busy => {
                 *p.state = match dir {
-                    Up => Roll,
+                    Up => neutral_state(airborne, &input, &mut p.facing),
                     Down if airborne != Grounded => GroundPound,
                     Back | Fwd => {
                         change_facing(input.move_x, &mut p.facing);
                         ChargedPunch
                     }
                     // grounded down-special and neutral both roll
-                    Down | AtkDirection::Neutral => Roll,
+                    Neutral => Roll,
+                    Down => match *p.state {
+                        SuperCrouch => SuperCrouch,
+                        _ => GroundPound,
+                    }
                 };
             }
 
             // -------- fallthrough --------
-            _ if !p.status.busy => *p.state = neutral_state(airborne),
+            _ if !p.status.busy => *p.state = neutral_state(airborne, &input, &mut p.facing),
             _ => {}
         }
 

@@ -31,7 +31,7 @@ pub enum AirborneState {
 }
 
 #[derive(Component, Copy, Clone, Debug, PartialEq)]
-pub struct AirJumpsRemaining(pub u32);
+pub struct AirJumpsRemaining(pub i32);
 
 #[derive(Component, Debug, PartialEq, Copy, Clone)]
 pub enum PlayerState {
@@ -40,7 +40,6 @@ pub enum PlayerState {
     Crouch,
     Running,
 
-    Dash,
     Slide,
 
     Hitstun,
@@ -61,8 +60,10 @@ pub enum PlayerState {
     ControlledAirborne,
     UncontrolledFall,
 
-    SmashDash,
-    SmashDrop,
+    FlickDash,
+    FlickDrop,
+    DashFlop,
+    DashFlop2,
 
     PreDownKick,
     DownKick,
@@ -109,6 +110,7 @@ pub enum PlayerAction {
     Dodge,
     None,
     DropDown,
+    Dash,
 }
 
 

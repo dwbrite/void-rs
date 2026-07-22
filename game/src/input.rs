@@ -26,6 +26,7 @@ pub enum InputAction {
     Spin,
     MoveX,
     MoveY,
+    Dash,
 }
 
 pub struct InputPlugin;
@@ -54,7 +55,6 @@ fn setup_bindings(mut map: ResMut<ActionMap<InputAction>>) {
     // south-attack has two parts
     // map.bind(InputAction::Attack(South), Binding::tap(Stick::Right, Octant::South).with(Processor::Threshold(0.1)));
     map.bind(InputAction::Attack(South), Binding::axis(GamepadAxis::RightStickY).with(Processor::Negate).with(Processor::Threshold(0.9)));
-
     let b = Binding::button(GamepadButton::South);
 
     // Roll c-stick to spin:
@@ -70,6 +70,10 @@ fn setup_bindings(mut map: ResMut<ActionMap<InputAction>>) {
     // Motion: direct analog sticks.
     map.bind(InputAction::MoveX, Binding::axis(GamepadAxis::LeftStickX));
     map.bind(InputAction::MoveY, Binding::axis(GamepadAxis::LeftStickY));
+
+    // Dash:
+    map.bind(InputAction::Dash, Binding::tap(Stick::Left, Octant::East).with(Processor::Threshold(0.1)));
+    map.bind(InputAction::Dash, Binding::tap(Stick::Left, Octant::West).with(Processor::Threshold(0.1)));
 
     // Drop down fast
     map.bind(InputAction::DropDown, Binding::tap(Stick::Left, Octant::South).with(Processor::Threshold(0.1)));

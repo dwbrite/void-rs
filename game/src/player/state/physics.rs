@@ -10,10 +10,9 @@ use super::types::{AirJumpsRemaining, Facing, PlayerState, StateTicks, AirborneS
 const GROUND_FRICTION: f32 = 0.6;
 const HELD_ASCENT_GRAVITY: f32 = 0.8;  // 0.07 / 0.28
 const FLOAT_FALL_GRAVITY:  f32 = 0.95;  // 0.045 / 0.28
-const GROUND_TARGET_SPEED: f32 = 48.0;
+const GROUND_SPEED: f32 = 48.0;
 const LANDING_BLEND_TICKS: f32 = 500.0;   // frames to fully "plant"
 const LANDING_GRIP: f32 = 0.0001;         // per-tick pull toward target right at touchdown
-
 const SPIN_GROUND_ACCEL: f32 = 2.8;      // per-tick velocity gain toward stick dir
 const SPIN_GROUND_MAX_SPEED: f32 = 80.0; // spin can out-speed running (48) — that's the point
 const SPIN_AIR_RAMP_SECS_TICKS: f32 = 128.0; // ~1s at 60Hz to full heaviness
@@ -25,7 +24,7 @@ const SPIN_CATCH_RAMP_TICKS: f32 = 20.0; // how long the catch takes to reach fu
 
 use PlayerState::*;
 use crate::player::state::AirborneState::Grounded;
-use crate::player::state::spin_input_speed;
+use crate::player::state::{spin_input_speed, PreviousState};
 
 fn old_school_gravity(status: &CharacterStatus, velocity: &Velocity, gravity: &mut GravityScale) {
     gravity.0 = if !status.holding_jump {
@@ -49,7 +48,10 @@ pub struct PlayerPhysicsQuery {
     air_jumps: &'static AirJumpsRemaining,
     spring_mass: &'static SpringMass,
     gravity: &'static mut GravityScale,
+    old_state: &'static mut PreviousState,
 }
+
+const GROUND_DASH_SPEED: f32 = 72.0;
 
 pub fn update_playerstate_physics(
     input_map: bevy::prelude::Res<ActionMap<InputAction>>,
@@ -72,7 +74,6 @@ pub fn update_playerstate_physics(
             DownKick => (0.8, 0.8),
             FwdAir => (0.9, 1.0),
             BackAir => (1.3, 1.0),
-            NeutralAir => (1.0, 1.0),
             PreJump => (1.3, 1.0),
             _ => (1.0, 1.0),
         };
@@ -85,8 +86,15 @@ pub fn update_playerstate_physics(
                 // 0.0 = just landed, 1.0 = fully planted
                 let t = (p.status.ticks_since_landed as f32 / LANDING_BLEND_TICKS).clamp(0.0, 1.0);
 
+                // move 64 to run speed target minimum
+                let target_speed = if p.velocity.linear.x.abs() > 48.0 {
+                    move_x * GROUND_DASH_SPEED
+                } else {
+                    move_x * GROUND_SPEED
+                };
+
                 if move_x.abs() >= 0.25 {
-                    let target = move_x * GROUND_TARGET_SPEED;
+                    let target = target_speed;
                     let same_dir = target * p.velocity.linear.x > 0.0;
                     let carrying_speed = p.velocity.linear.x.abs() > target.abs();
 
@@ -104,6 +112,16 @@ pub fn update_playerstate_physics(
                 } else {
                     p.velocity.linear.x *= 0.90;
                 }
+            }
+            FlickDash => {
+                if move_x >= 0.0 {
+                    p.velocity.linear.x = GROUND_DASH_SPEED;
+                } else {
+                    p.velocity.linear.x = -GROUND_DASH_SPEED;
+                }
+            }
+            DashFlop => {
+                p.velocity.linear.x *= 1.0;
             }
             SuperJump => {
                 if p.state_ticks.0 == 10 {
@@ -191,13 +209,17 @@ pub fn update_playerstate_physics(
                     p.status.no_jump = false;
                 }
             }
-            UpAir | FwdAir | BackAir | NeutralAir => {
+            UpAir | FwdAir | BackAir => {
                 p.status.busy = true;
                 p.status.no_jump = true;
 
                 if *p.state == UpAir && *p.airborne == AirborneState::Grounded {
                     // fake it till you make it lmao
-                    air_shit::air_jump_phys(p.state, p.state_ticks, move_x, move_y, &AirJumpsRemaining(1), &mut p.velocity, &mut p.status);
+                    if &p.old_state.0 == &DashFlop {
+                        air_shit::air_jump_phys(p.state, p.state_ticks, move_x, move_y, &AirJumpsRemaining(0), &mut p.velocity, &mut p.status);
+                    } else {
+                        air_shit::air_jump_phys(p.state, p.state_ticks, move_x, move_y, &AirJumpsRemaining(2), &mut p.velocity, &mut p.status);
+                    }
                 } else {
                     match p.airborne {
                         AirborneState::Airborne => aerial_x_movement(move_x, &mut p.velocity, di_multiplier),
@@ -211,7 +233,7 @@ pub fn update_playerstate_physics(
                 old_school_gravity(&p.status, &p.velocity, &mut p.gravity);
                 aerial_x_movement(move_x, &mut p.velocity, di_multiplier);
             }
-            SmashDrop => {
+            FlickDrop => {
                 p.status.no_jump = false;
                 if p.state_ticks.0 == 0 {
                     p.status.busy = true;
@@ -230,7 +252,7 @@ pub fn update_playerstate_physics(
 
                 // Entry edge: eligibility decided once, here.
                 if !p.status.was_spinning {
-                    p.status.spin_can_float = !p.status.spin_float_used;
+                    p.status.spin_can_float = true; // formerly !p.status.spin_float_used;
                     p.status.spin_fall_ticks = 0;
                 }
 

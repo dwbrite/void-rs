@@ -5,7 +5,7 @@ use bevy_aseprite_ultra::prelude::{Animation, AseAnimation, Aseprite};
 use bevy_rapier2d::dynamics::Velocity;
 use bevy_rapier2d::prelude::{ActiveEvents, Ccd, Collider, GravityScale, LockedAxes, RigidBody};
 use crate::{AnimationIndices, AnimationTimer, PIXEL_PERFECT_LAYERS};
-use crate::player::state::{sproing, AirJumpsRemaining, AirborneState, Facing, PlayerAction, PlayerState, PreviousState, SpringMass, StateTicks};
+use crate::player::state::{sproing, AirJumpsRemaining, AirborneState, AnimationStatus, Facing, PlayerAction, PlayerState, PreviousState, SpringMass, StateTicks};
 
 pub mod special_attacks;
 pub mod state;
@@ -36,6 +36,7 @@ impl Plugin for PlayerPlugin {
         app.add_systems(Startup, setup_player)
             .add_systems(FixedUpdate, (
                 state::detect_ground,
+                state::update_animation_status,
                 state::update_playerstate,
                 state::reset_state_ticks,
                 animation::flip_sprite,
@@ -106,6 +107,7 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
         AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
         Ccd::enabled(),
         GravityScale(1.0),
+        AnimationStatus::Finished,
     ));
 }
 

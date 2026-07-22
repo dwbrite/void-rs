@@ -23,9 +23,15 @@ pub fn playerstate_animation(
     let move_y = input_map.value(InputAction::MoveY);
     for (playerstate, mut animation, velocity, ticks, spring) in &mut query {
         match playerstate {
-            PlayerState::Idle | PlayerState::Running | PlayerState::SmashDrop => {
+            PlayerState::Idle | PlayerState::Running | PlayerState::FlickDrop => {
                 match spring.y {
-                    y if y >= -10.0 && playerstate == &PlayerState::Running => { animation.animation = Animation::tag("run").with_speed(abs(velocity.linear.x / 56.0)); }
+                    y if y >= -10.0 && playerstate == &PlayerState::Running => {
+                        if velocity.linear.x.abs() <= 56.0 {
+                            animation.animation = Animation::tag("run").with_speed(abs(velocity.linear.x / 56.0));
+                        } else {
+                            animation.animation = Animation::tag("RUNNNN").with_speed(abs(velocity.linear.x / 56.0));
+                        }
+                    }
                     y if y > 5.0 => { animation.animation = Animation::tag("lookup1"); }
                     y if y < -50.0 => { animation.animation = Animation::tag("pre-supercrouch"); }
                     y if y < -45.0 => { animation.animation = Animation::tag("hardcrouch"); }
@@ -35,7 +41,7 @@ pub fn playerstate_animation(
                     y if y < -10.0 => { animation.animation = Animation::tag("lookdown"); }
                     _ => { animation.animation = Animation::tag("idle"); }
                 }
-            },
+            }
             PlayerState::Lookup => {
                 match move_y {
                     y if y > 0.96 => { animation.animation = Animation::tag("lookup4"); }
@@ -70,8 +76,11 @@ pub fn playerstate_animation(
                     _ => {}
                 }
             },
+            PlayerState::Slide if ticks.0 == 0 => {
+                animation.animation = Animation::tag("preslide").with_repeat(Count(0)).with_then("slide", Loop);
+            }
             PlayerState::BackAir if ticks.0 == 0 => {
-                animation.animation = Animation::tag("air back kick").with_repeat(Count(0)).with_then("abk-hit", Count(1)).with_then("abk-rec", Count(0));
+                animation.animation = Animation::tag("air back kick").with_repeat(Count(0)).with_then("abk-hit", Count(2)).with_then("abk-rec", Count(0));
             },
             PlayerState::FwdAir => { // TODO: find out if fwd air is... supposed to be... resettable?
                 animation.animation = Animation::tag("air kick").with_repeat(Count(0));
@@ -95,11 +104,14 @@ pub fn playerstate_animation(
             PlayerState::Interactnt => if ticks.0 == 0 {
                 animation.animation = Animation::tag("basic punch rec").with_repeat(Count(0));
             }
-            PlayerState::NeutralAir => {
-                animation.animation = Animation::tag("basic punch").with_repeat(Count(0));
-            }
             PlayerState::UpAir if ticks.0 == 0 => {
                 animation.animation = Animation::tag("upkick").with_repeat(Count(0));
+            }
+            PlayerState::DashFlop if ticks.0 == 0 => {
+                animation.animation = Animation::tag("dash-flop").with_repeat(Count(0));
+            }
+            PlayerState::DashFlop2 if ticks.0 == 0 => {
+                animation.animation = Animation::tag("dash-flop2").with_repeat(Count(0));
             }
             // PlayerState::SmashDrop if ticks.0 == 0 => {
             //     animation.animation = Animation::tag("smashdrop").with_repeat(Count(0));

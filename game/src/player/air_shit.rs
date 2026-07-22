@@ -6,7 +6,7 @@ use crate::player::state::{AirJumpsRemaining, PlayerState, StateTicks};
 pub fn air_jump_phys(mut state: &PlayerState, state_ticks: &StateTicks, move_x: f32, move_y: f32, air_jumps: &AirJumpsRemaining, mut velocity: &mut Velocity, x: &mut CharacterStatus) {
     // Frame 0: apply impulse with DI influence
     if state_ticks.0 == 0 {
-        let jumps_used = (AIR_JUMPS - air_jumps.0) as f32; // need AirJumpsRemaining in query
+        let jumps_used = (AIR_JUMPS as i32 - air_jumps.0) as f32; // need AirJumpsRemaining in query
 
         let vertical_di = if move_y > 0.0 {
             move_y * AIR_JUMP_DI_UP_STRENGTH    // nerfed upward
