@@ -94,6 +94,7 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
             spin_float_used: false,
             was_spinning: false,
             spin_fall_ticks: 0,
+            slide_charged: false,
         },
         SpringMass {
             y: 0.0,
@@ -122,6 +123,7 @@ pub struct CharacterStatus {
     pub spin_float_used: bool,  // once per airtime; cleared on Grounded (unchanged)
     pub was_spinning: bool,     // edge detector for spin entry
     pub spin_fall_ticks: u32,   // ticks spent in the descending phase of the current spin float
+    pub slide_charged: bool,
 }
 
 #[derive(Component)]

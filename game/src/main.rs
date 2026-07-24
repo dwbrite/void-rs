@@ -131,13 +131,14 @@ fn setup_movement_demo(
     // Keep backdrop sprite separate from the mesh/collider floor entity.
     commands.spawn((
         PIXEL_PERFECT_LAYERS,
-        Transform::from_xyz(0.0, -42.0, 1.0),
+        Transform::from_xyz(0.0, -42.5, 1.0),
         AseAnimation {
             animation: "tag".into(),
             aseprite: _asset_server.load("test-backdrop.aseprite"),
         },
         // AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
         Sprite::default(),
+        RigidBody::Fixed,
     ));
 }
 
@@ -177,7 +178,7 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         Camera {
             // Render before the "main pass" camera
             order: -1,
-            clear_color: ClearColorConfig::Custom(Srgba::hex("0c0710").unwrap().into()),
+            clear_color: ClearColorConfig::Custom(Srgba::hex("04040f").unwrap().into()),
             ..default()
         },
         RenderTarget::Image(image_handle.clone().into()),

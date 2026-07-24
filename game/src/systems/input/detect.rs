@@ -30,6 +30,24 @@ const BUTTONS: &[GamepadButton] = &[
     GamepadButton::DPadRight,
 ];
 
+const DBG_FLICK: bool = true;
+const DBG_STICK: Stick = Stick::Right; // the c-stick is where the action is; Left to switch, or gate on both
+
+macro_rules! dbg_flick {
+    ($stick:expr, $($arg:tt)*) => {
+        if DBG_FLICK && $stick == DBG_STICK {
+            println!("[flick {:?} {:>8.3}] {}", $stick, 0.0, format!($($arg)*));
+        }
+    };
+}
+
+macro_rules! dbg_flick {
+    ($stick:expr, $now:expr, $($arg:tt)*) => {
+        if DBG_FLICK && $stick == DBG_STICK {
+            println!("[flick {:?} {:>9.3}] {}", $stick, $now, format!($($arg)*));
+        }
+    };
+}
 // ---------------------------------------------------------------------------
 // Per-pad state
 // ---------------------------------------------------------------------------
@@ -58,6 +76,12 @@ enum FlickState {
         /// When mag last dipped below the edge (springback timing).
         /// None while pinned at the edge.
         left_edge: Option<f32>,
+
+        /// TapDeflect not yet emitted — waiting out the roll grace window.
+        pending_tap: bool,
+        /// |Δangle| accumulated while pinned at the edge. Roll evidence.
+        rotated: f32,
+        prev_angle: f32,
     },
 }
 
@@ -149,17 +173,20 @@ fn tick_stick(
     det.flick = match std::mem::take(&mut det.flick) {
         FlickState::Idle => {
             if mag >= cfg.tap_min_displacement {
-                // 0 -> edge in a single tick: trivially fast.
                 let oct = octant_of(angle);
-                tap_deflect = Some(oct); // (1) fires on arrival, zero latency
+                dbg_flick!(stick, now, "Idle -> Deflected oct={oct} (single-tick, fast)");
                 FlickState::Deflected {
                     crossed: now,
                     locked_octant: oct,
                     cur_octant: oct,
-                    fast: true,
+                    fast: true,            // FIX: regressed to false
                     left_edge: None,
+                    pending_tap: true,     // FIX: regressed to false
+                    rotated: 0.0,
+                    prev_angle: angle,
                 }
             } else if mag > cfg.flick_rest_radius {
+                // no print: Rising entries happen on every stick twitch — too noisy.
                 FlickState::Rising { start: now }
             } else {
                 FlickState::Idle
@@ -170,46 +197,89 @@ fn tick_stick(
             if mag >= cfg.tap_min_displacement {
                 let fast = now - start <= cfg.flick_rise_time;
                 let oct = octant_of(angle);
-                if fast {
-                    tap_deflect = Some(oct); // (1) fires on arrival
-                }
+                dbg_flick!(stick, now, "Rising -> Deflected oct={oct} rise={:.0}ms fast={fast}",
+                   (now - start) * 1000.0);
                 FlickState::Deflected {
-                    crossed: now,
-                    locked_octant: oct,
-                    cur_octant: oct,
-                    fast,
-                    left_edge: None,
+                    crossed: now, locked_octant: oct, cur_octant: oct, fast,
+                    left_edge: None, pending_tap: fast, rotated: 0.0, prev_angle: angle,
                 }
             } else if mag <= cfg.flick_rest_radius {
-                FlickState::Idle // wiggled and gave up; never reached the edge
+                // silent: abandoned wiggles are common and boring
+                FlickState::Idle
             } else {
                 FlickState::Rising { start }
             }
         }
 
-        FlickState::Deflected { crossed, locked_octant, mut cur_octant, fast, mut left_edge } => {
+        FlickState::Deflected {
+            crossed, locked_octant, mut cur_octant, fast, mut left_edge,
+            mut pending_tap, mut rotated, prev_angle,
+        } => {
             let held = now - crossed;
 
+            if mag >= cfg.tap_min_displacement {
+                rotated += wrap_angle(angle - prev_angle);   // signed, FIX: shadowed duplicate removed
+            }
+            let is_roll = rotated.abs() >= cfg.tap_cancel_rotation;   // FIX: .abs()
+
+            if pending_tap {
+                if is_roll {
+                    dbg_flick!(stick, now, "TAP CANCELLED oct={locked_octant} rotated={:+.0}° in {:.0}ms",
+                       rotated.to_degrees(), held * 1000.0);
+                    pending_tap = false;
+                } else if held >= cfg.tap_roll_grace {
+                    dbg_flick!(stick, now, "TapDeflect oct={locked_octant} (grace expired, rotated={:+.0}°)",
+                       rotated.to_degrees());
+                    tap_deflect = Some(locked_octant);
+                    pending_tap = false;
+                }
+            }
+
             if mag <= cfg.tap_release_radius {
-                // Back at center: classify the exit.
-                if fast && held <= cfg.tap_max_hold {
-                    tap_release = Some(locked_octant); // (2)
-                } else if held >= cfg.spring_min_hold
+                if fast && !is_roll {
+                    if pending_tap {
+                        dbg_flick!(stick, now, "TapDeflect oct={locked_octant} (early release)");
+                        tap_deflect = Some(locked_octant);
+                    }
+                    if held <= cfg.tap_max_hold {
+                        dbg_flick!(stick, now, "TapRelease oct={locked_octant} held={:.0}ms", held * 1000.0);
+                        tap_release = Some(locked_octant);
+                    } else {
+                        dbg_flick!(stick, now, "no TapRelease: held {:.0}ms > max {:.0}ms",
+                           held * 1000.0, cfg.tap_max_hold * 1000.0);
+                    }
+                } else if !is_roll
+                    && held >= cfg.spring_min_hold
                     && left_edge.map_or(true, |t| now - t <= cfg.spring_max_release_time)
                 {
-                    deflect_release = Some(cur_octant); // (3)
+                    dbg_flick!(stick, now, "DeflectRelease oct={cur_octant} held={:.0}ms", held * 1000.0);
+                    deflect_release = Some(cur_octant);
+                } else {
+                    // The catch-all "why did nothing fire" print — the most useful line here.
+                    dbg_flick!(stick, now,
+                "release, no gesture: fast={fast} is_roll={is_roll} rotated={:+.0}° held={:.0}ms spring_edge_ok={}",
+                rotated.to_degrees(), held * 1000.0,
+                left_edge.map_or(true, |t| now - t <= cfg.spring_max_release_time));
                 }
-                // else: slow ease back to neutral — no gesture, on purpose.
                 FlickState::Idle
             } else {
                 if mag >= cfg.tap_min_displacement {
-                    left_edge = None;               // (re)pinned to the edge
-                    cur_octant = octant_of(angle);  // track rotation during hold
+                    left_edge = None;
+                    if cur_octant != octant_of(angle) {
+                        // octant hops during a hold are rare enough to log, and they're
+                        // exactly the rotation the cancel logic keys on
+                        dbg_flick!(stick, now, "hold rotate: oct {cur_octant} -> {} rotated={:+.0}°",
+                           octant_of(angle), rotated.to_degrees());
+                    }
+                    cur_octant = octant_of(angle);
                 } else if left_edge.is_none() {
-                    left_edge = Some(now);          // started coming off the edge
+                    left_edge = Some(now);
+                    // silent: springback start is implied by the release print's timing
                 }
-
-                FlickState::Deflected { crossed, locked_octant, cur_octant, fast, left_edge }
+                FlickState::Deflected {
+                    crossed, locked_octant, cur_octant, fast, left_edge,
+                    pending_tap, rotated, prev_angle: angle,
+                }
             }
         }
     };

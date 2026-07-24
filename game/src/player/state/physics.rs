@@ -191,23 +191,27 @@ pub fn update_playerstate_physics(
             PreDownKick => {
                 p.status.busy = true;
                 p.status.no_jump = true;
-
-                aerial_x_movement(move_x, &mut p.velocity, (0.4, 1.0));
+                if p.airborne == &Grounded {
+                    aerial_x_movement(move_x, &mut p.velocity, (0.05, 1.0));
+                } else {
+                    aerial_x_movement(move_x, &mut p.velocity, (1.0, 1.0));
+                }
             }
             DownKick => {
                 if p.state_ticks.0 == 0 {
-                    p.status.busy = true;
-                    p.status.no_jump = true;
-
+                    p.status.busy = false;
+                    p.status.no_jump = false;
+                } else if p.state_ticks.0 <= 24 {
                     // TODO: did_hit, and make it check for the entire durations
                     let did_hit = false;
                     if did_hit || matches!(p.airborne, Grounded) {
-                        p.velocity.linear.y = AIR_JUMP_BASE_IMPULSE * 0.9;
+                        p.velocity.linear.y = AIR_JUMP_BASE_IMPULSE * 0.75;
                     }
-                } else if p.state_ticks.0 >= 6 {
+
                     p.status.busy = false;
                     p.status.no_jump = false;
                 }
+                aerial_x_movement(move_x, &mut p.velocity, di_multiplier);
             }
             UpAir | FwdAir | BackAir => {
                 p.status.busy = true;
@@ -257,16 +261,40 @@ pub fn update_playerstate_physics(
                 }
 
                 let live_spin = input_map.value(InputAction::Spin);
+                const SPIN_GROUND_OVERCAP_FRICTION: f32 = 0.5; // per tick; carried speed eases to cap, ~64 u/s
 
                 match p.airborne {
+
                     AirborneState::Grounded => {
-                        let max_speed = SPIN_GROUND_MAX_SPEED + 24.0 * (1.0 + (spin_input_speed(&input_map) * 1.5).clamp(0.0, 1.0));
+                        let max_speed = SPIN_GROUND_MAX_SPEED
+                            + 24.0 * (1.0 + (spin_input_speed(&input_map) * 1.5).clamp(0.0, 1.0));
 
                         p.gravity.0 = 1.0;
                         let accel = SPIN_GROUND_ACCEL * live_spin.clamp(0.2, 1.5);
-                        p.velocity.linear.x += move_x * accel;
-                        p.velocity.linear.x = p.velocity.linear.x
-                            .clamp(-SPIN_GROUND_MAX_SPEED, max_speed);
+                        let v = p.velocity.linear.x;
+
+                        // Accel only pushes you up to the cap — never reduces over-cap speed.
+                        // (Same .max(v) trick as the air code: the clamp can't pull you down.)
+                        let nv = if move_x > 0.0 {
+                            (v + move_x * accel).min(max_speed.max(v))
+                        } else if move_x < 0.0 {
+                            (v + move_x * accel).max((-max_speed).min(v))
+                        } else {
+                            v
+                        };
+                        p.velocity.linear.x = nv;
+
+                        // Carried over-cap momentum bleeds gently toward the cap instead of snapping.
+                        if p.velocity.linear.x.abs() > max_speed {
+                            let target = max_speed * p.velocity.linear.x.signum();
+                            let d = p.velocity.linear.x - target;
+                            p.velocity.linear.x = if d.abs() <= SPIN_GROUND_OVERCAP_FRICTION {
+                                target
+                            } else {
+                                p.velocity.linear.x - SPIN_GROUND_OVERCAP_FRICTION * d.signum()
+                            };
+                        }
+
                         if move_x.abs() < 0.25 {
                             p.velocity.linear.x *= 0.985;
                         }
@@ -295,7 +323,7 @@ pub fn update_playerstate_physics(
                         } else {
                             p.gravity.0 = 1.5;
                         }
-                        p.velocity.linear.x *= SPIN_AIR_X_DECAY;
+                        aerial_x_movement(move_x, &mut p.velocity, di_multiplier);
                     }
                 }
             }
@@ -330,7 +358,7 @@ pub fn update_playerstate_physics(
                 p.status.busy = true;
             }
             Interactnt => {
-                p.status.busy = false;
+                p.status.busy = true;
             }
             _ => {
                 p.status.busy = false;
@@ -341,9 +369,46 @@ pub fn update_playerstate_physics(
     }
 }
 
-pub(crate) fn aerial_x_movement(move_x: f32, velocity: &mut Velocity, di_multiplier: (f32, f32)) {
-    let apex_boost = (1.0 - velocity.linear.y.abs() / 20.0).clamp(0.0, 1.0);
+const AIR_MAX_SPEED: f32 = 86.0;         // was 76; also gives real headroom over the 72 slide gate
+const AIR_ACCEL: f32 = 7.0;
+const AIR_FRICTION_LIN: f32 = 1.3;       // neutral bleed, unchanged
+const AIR_HELD_OVERCAP_FRICTION: f32 = 0.35; // over-cap bleed while holding into it (~45 u/s)
+const CAP_SOFT_BAND: f32 = 14.0;         // accel fades over the last 14 units below cap
 
-    velocity.linear.x *= AIR_FRICTION;
-    velocity.linear.x += move_x * di_multiplier.0 * AIR_SPEED * (1.0 + 0.4 * apex_boost);
+pub(crate) fn aerial_x_movement(move_x: f32, velocity: &mut Velocity, di: (f32, f32)) {
+    let v = velocity.linear.x;
+    // di scales authority, not the ceiling. >1 (BackAir 1.3) still raises it — that's a perk.
+    let cap = AIR_MAX_SPEED * di.0.max(1.0);
+    let accel = move_x * AIR_ACCEL * di.0;
+    let neutral = move_x.abs() < 0.15;
+    let pushing_along = move_x * v > 0.0;
+
+    let mut nv = v;
+
+    // Accel: full strength on reversal / from rest; tapers smoothly to zero
+    // over CAP_SOFT_BAND approaching the cap. No hard clip anymore.
+    if !neutral {
+        let gain = if pushing_along {
+            ((cap - v.abs()) / CAP_SOFT_BAND).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        nv += accel * gain;
+    }
+
+    // Friction, all linear:
+    //   over cap + holding into it  → gentle bleed toward cap
+    //   over cap + neutral/reverse  → full bleed toward cap
+    //   below cap + neutral         → full bleed toward 0 (unchanged feel)
+    let over = nv.abs() > cap;
+    if over {
+        let fric = if pushing_along && !neutral { AIR_HELD_OVERCAP_FRICTION } else { AIR_FRICTION_LIN };
+        let target = cap * nv.signum();
+        let d = nv - target;
+        nv = if d.abs() <= fric { target } else { nv - fric * d.signum() };
+    } else if neutral {
+        nv = if nv.abs() <= AIR_FRICTION_LIN { 0.0 } else { nv - AIR_FRICTION_LIN * nv.signum() };
+    }
+
+    velocity.linear.x = nv;
 }

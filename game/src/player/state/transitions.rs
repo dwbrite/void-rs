@@ -162,11 +162,10 @@ impl FrameInput {
         let move_x = map.value(InputAction::MoveX);
         let move_y = map.value(InputAction::MoveY);
 
-        // Priority: Jump > Special > Attack, same as before.
-        let action = if map.just_pressed(InputAction::Jump)
-            || (!busy && map.buffered_press(InputAction::Jump, JUMP_BUFFER_WINDOW))
-        {
+        let action = if map.just_pressed(InputAction::Jump) || (!busy && map.buffered_press(InputAction::Jump, JUMP_BUFFER_WINDOW)) {
             PlayerAction::Jump
+        } else if map.just_pressed(InputAction::AirJump) || (!busy && map.buffered_press(InputAction::AirJump, JUMP_BUFFER_WINDOW)) {
+            PlayerAction::AirJump
         } else if let Some(dir) = resolve_directional(map, busy, facing, move_x, move_y, InputAction::Special) {
             PlayerAction::Special(dir)
         } else if let Some(dir) = resolve_directional(map, busy, facing, move_x, move_y, InputAction::Attack) {
@@ -177,9 +176,12 @@ impl FrameInput {
             PlayerAction::DropDown
         } else if map.is_down(InputAction::Dash){
             PlayerAction::Dash
+        } else if map.just_pressed(InputAction::DownRelease){
+            PlayerAction::DownRelease
         } else {
             PlayerAction::None
         };
+        // Priority: Jump > Special > Attack, same as before.
 
         Self {
             move_x,
@@ -232,6 +234,12 @@ pub fn update_playerstate(
             || (matches!(*p.state, SuperJump) && p.state_ticks.0 <= SUPER_JUMP_LOCK_TICKS);
         let input = FrameInput::read(&mut input_map, &p.facing, input_locked);
 
+        // // in update_playerstate, right after FrameInput::read:
+        // if !matches!(input.action, PlayerAction::None) {
+        //     println!("[action {:>9.3}] {:?} (state={:?} busy={} locked={})",
+        //              now, input.action, *p.state, p.status.busy, input_locked);
+        // }
+
         *p.action = input.action;
 
         if !input_map.is_down(InputAction::Jump) {
@@ -250,7 +258,8 @@ pub fn update_playerstate(
                 }
             }
 
-            (BackAir, _) if airborne == Grounded && p.state_ticks.0 >= 4 && p.state_ticks.0 <= 48 => {
+            (BackAir, _) if airborne == Grounded && (4..=48).contains(&p.state_ticks.0) => {
+                p.status.slide_charged = false;
                 *p.facing = match *p.facing {
                     Facing::Left => Facing::Right,
                     Facing::Right => Facing::Left,
@@ -260,6 +269,13 @@ pub fn update_playerstate(
 
             (UpAir, _) if airborne == Grounded && p.state_ticks.0 >= 4 => {
                 *p.state = DashFlop2;
+            }
+
+            (DownKick, _) => {
+                if anim_finished {
+                    *p.state = neutral_state(airborne, &input, &mut p.facing);
+                    println!("swag");
+                }
             }
 
             (DashFlop | DashFlop2, action) => {
@@ -311,8 +327,13 @@ pub fn update_playerstate(
                 *p.state = neutral_state(airborne, &input, &mut p.facing);
             }
 
-            (PlayerState::PreDownKick, PlayerAction::None) => {
-                if !input_map.is_down(InputAction::Attack(South)) {
+            (PreDownKick, _) if airborne == Grounded && p.velocity.linear.x.abs() >= 48.0 => {
+                p.status.slide_charged = true;
+                *p.state = Slide;
+            }
+
+            (PlayerState::PreDownKick, _) => {
+                if !input_map.is_down(InputAction::DownRelease) {
                     *p.state = DownKick;
                 }
             }
@@ -342,21 +363,19 @@ pub fn update_playerstate(
             }
 
             (Slide, action) => {
-                *p.state = match action {
-                    PlayerAction::Attack(_) => {
-                        UpAir
-                    }
-                    PlayerAction::Jump => {
-                        Jumping
-                    }
-                    _ => {
-                        if p.velocity.linear.x.abs() <= 1.0 && p.state_ticks.0 >= 16 {
-                            neutral_state(airborne, &input, &mut p.facing)
-                        } else {
-                            Slide
+                if p.status.slide_charged && !input_map.is_down(InputAction::DownRelease) {
+                    *p.state = DownKick;
+                } else {
+                    match action {
+                        PlayerAction::Attack(_) => *p.state = UpAir,
+                        PlayerAction::Jump => *p.state = Jumping,
+                        _ => {
+                            if p.velocity.linear.x.abs() <= 1.0 && p.state_ticks.0 >= 16 {
+                                *p.state = neutral_state(airborne, &input, &mut p.facing);
+                            }
                         }
                     }
-                };
+                }
             }
 
             // -------- jumps --------
@@ -376,6 +395,17 @@ pub fn update_playerstate(
                     } else {
                         *p.state = PreJump;
                     }
+                }
+                _ => {} // airborne, out of air jumps
+            },
+
+            // -------- jumps --------
+            (_, PlayerAction::AirJump) if !p.status.no_jump && !p.status.busy => match airborne {
+                Airborne if p.air_jumps.0 > 0 => {
+                    p.air_jumps.0 -= 1;
+                    // TODO: should change facing be strictly by momentum here?
+                    change_facing(input.move_x, &mut p.facing);
+                    *p.state = AirJump;
                 }
                 _ => {} // airborne, out of air jumps
             },
@@ -451,8 +481,13 @@ pub fn update_playerstate(
                         }
                     },
                     Back => {
-                        if matches!(airborne, Grounded) {
-                            change_facing(input.move_x, &mut p.facing);
+                        if matches!(airborne, Grounded) && p.velocity.linear.x.abs() > 64.0 {
+                            DashFlop
+                        } else if matches!(airborne, Grounded) {
+                            *p.facing = match *p.facing {
+                                Facing::Left => Facing::Right,
+                                Facing::Right => Facing::Left,
+                            };
                             FwdAir
                         } else {
                             BackAir

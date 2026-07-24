@@ -102,6 +102,7 @@ pub struct PreviousState(pub PlayerState);
 
 #[derive(Component, Copy, Clone, Debug)]
 pub enum PlayerAction {
+    AirJump,
     Jump,
     Attack(AtkDirection),
     Special(AtkDirection),
@@ -111,6 +112,7 @@ pub enum PlayerAction {
     None,
     DropDown,
     Dash,
+    DownRelease,
 }
 
 

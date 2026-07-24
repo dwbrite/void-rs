@@ -1,9 +1,11 @@
 use bevy::input::gamepad::{GamepadAxis, GamepadButton};
 use bevy::prelude::*;
+use bevy::prelude::GamepadAxis::RightStickY;
 use crate::input::AttackControl::{East, MoveXY, North, South, West};
 use crate::systems::input::{
     ActionMap, Binding, GameInputPlugin, Processor, RollDir, Stick,
 };
+use crate::systems::input::Processor::Negate;
 use crate::systems::input::RollDir::{Ccw, Cw};
 use crate::systems::input::signal::Octant;
 
@@ -27,6 +29,8 @@ pub enum InputAction {
     MoveX,
     MoveY,
     Dash,
+    AirJump,
+    DownRelease,
 }
 
 pub struct InputPlugin;
@@ -53,17 +57,20 @@ fn setup_bindings(mut map: ResMut<ActionMap<InputAction>>) {
     map.bind(InputAction::Attack(East), Binding::tap(Stick::Right, Octant::East).with(Processor::Threshold(0.1)));
     map.bind(InputAction::Attack(West), Binding::tap(Stick::Right, Octant::West).with(Processor::Threshold(0.1)));
     // south-attack has two parts
-    // map.bind(InputAction::Attack(South), Binding::tap(Stick::Right, Octant::South).with(Processor::Threshold(0.1)));
-    map.bind(InputAction::Attack(South), Binding::axis(GamepadAxis::RightStickY).with(Processor::Negate).with(Processor::Threshold(0.9)));
-    let b = Binding::button(GamepadButton::South);
+    // press/trigger: tap — now roll-suppressed like the other three directions
+    map.bind(InputAction::Attack(South),
+             Binding::axis(RightStickY).with(Processor::Negate).with(Processor::Threshold(0.9)));
+    // hold: the old axis binding, moved to an action nothing treats as a press
+    map.bind(InputAction::DownRelease,
+             Binding::deflect_release(Stick::Right, Octant::South).with(Processor::Threshold(0.1)));
 
     // Roll c-stick to spin:
     map.bind(InputAction::Spin, Binding::roll(Stick::Right, Ccw)
-        .with(Processor::Threshold(0.120))
+        .with(Processor::Threshold(0.100))
         .with(Processor::DownSlew { from: 0.0, slew: 0.03})
         .with(Processor::UpSlew { from: 0.0, slew: 0.07}));
     map.bind(InputAction::Spin, Binding::roll(Stick::Right, Cw)
-        .with(Processor::Threshold(0.120))
+        .with(Processor::Threshold(0.100))
         .with(Processor::DownSlew { from: 0.0, slew: 0.03})
         .with(Processor::UpSlew { from: 0.0, slew: 0.07}));
 
@@ -77,5 +84,7 @@ fn setup_bindings(mut map: ResMut<ActionMap<InputAction>>) {
 
     // Drop down fast
     map.bind(InputAction::DropDown, Binding::tap(Stick::Left, Octant::South).with(Processor::Threshold(0.1)));
+
+    map.bind(InputAction::AirJump, Binding::tap(Stick::Left, Octant::North).with(Processor::Threshold(0.1)));
 }
 

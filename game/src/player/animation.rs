@@ -5,7 +5,7 @@ use bevy::ui::State;
 use bevy_aseprite_ultra::prelude::{Animation, AnimationDirection, AnimationEvents, AnimationRepeat, AseAnimation};
 use bevy_aseprite_ultra::prelude::AnimationRepeat::{Count, Loop};
 use bevy_rapier2d::prelude::Velocity;
-use crate::input::InputAction;
+use crate::input::{AttackControl, InputAction};
 use crate::player::AIR_SPEED;
 use crate::player::state::{spin_input_speed, Facing, PlayerState, SpringMass, StateTicks};
 use crate::systems::input::ActionMap;
@@ -44,8 +44,8 @@ pub fn playerstate_animation(
             }
             PlayerState::Lookup => {
                 match move_y {
-                    y if y > 0.96 => { animation.animation = Animation::tag("lookup4"); }
-                    y if y > 0.90 => { animation.animation = Animation::tag("lookup3"); }
+                    y if y > 0.85 => { animation.animation = Animation::tag("lookup4"); }
+                    y if y > 0.80 => { animation.animation = Animation::tag("lookup3"); }
                     y if y > 0.60 => { animation.animation = Animation::tag("lookup2"); }
                     y if y > 0.30 => { animation.animation = Animation::tag("lookup1"); }
                     _ => { /* not in look up animation */ }
@@ -85,11 +85,14 @@ pub fn playerstate_animation(
             PlayerState::FwdAir => { // TODO: find out if fwd air is... supposed to be... resettable?
                 animation.animation = Animation::tag("air kick").with_repeat(Count(0));
             }
-            PlayerState::PreDownKick if ticks.0 == 0 => {
-                animation.animation = Animation::tag("predkick").with_repeat(Count(0));
+            PlayerState::PreDownKick => {
+                // TODO: make this use right-stick for ~interactivity~ :stars: why don't my emojis work :(((
+                if ticks.0 == 0 {
+                    animation.animation = Animation::tag("predkick").with_repeat(Count(0));
+                }
             }
             PlayerState::DownKick if ticks.0 == 0 => {
-                animation.animation = Animation::tag("dkick").with_repeat(Count(3));
+                animation.animation = Animation::tag("dkick").with_repeat(Count(0));
             }
             PlayerState::SpinMove(speed) => {
                 let live = spin_input_speed(&input_map);
@@ -118,15 +121,14 @@ pub fn playerstate_animation(
             // }
             PlayerState::ControlledAirborne => {
                 match velocity.linear.y {
-                    y if y > 110.0 => animation.animation = Animation::tag("jumpfast"),
-                    y if y > 100.0 => animation.animation = Animation::tag("jump2"),
-
                     y if y < -80. => animation.animation = Animation::tag("fast fall"),
                     y if y < -20. => animation.animation = Animation::tag("fall2"),
-                    y if y < -10.0 => animation.animation = Animation::tag("fall1"),
-                    y if y <  0.0 => animation.animation = Animation::tag("fall-tween"),
+                    y if y < -10. => animation.animation = Animation::tag("fall1"),
+                    y if y <   0. => animation.animation = Animation::tag("fall-tween"),
                     y if y <  20. => animation.animation = Animation::tag("jump_apex"),
-                    _ => {}
+                    y if y <  80. => animation.animation = Animation::tag("jump"),
+                    y if y < 110. => animation.animation = Animation::tag("jump2"),
+                    _ => animation.animation = Animation::tag("jumpfast"),
                 }
             }
             PlayerState::SuperJump if ticks.0 == 0 => {
