@@ -1,13 +1,13 @@
 use avian2d::dynamics::integrator::IntegrationSystems::Velocity;
-use avian2d::prelude::{Collider, GravityScale, LinearVelocity, RigidBody};
+use avian2d::prelude::{CoefficientCombine, Collider, Friction, GravityScale, LinearVelocity, LockedAxes, Restitution, RigidBody, ShapeCaster};
 use bevy::app::{App, FixedUpdate, Plugin, Startup};
 use bevy::asset::AssetServer;
 use bevy::prelude::*;
 use bevy::ui::Gradient::Linear;
 use bevy_aseprite_ultra::prelude::{Animation, AseAnimation, Aseprite};
-use bevy_transform_interpolation::interpolation::TransformInterpolation;
 use crate::{AnimationIndices, AnimationTimer, PIXEL_PERFECT_LAYERS};
 use crate::player::state::{sproing, AirJumpsRemaining, AirborneState, AnimationStatus, Facing, PlayerAction, PlayerState, PreviousState, SpringMass, StateTicks};
+use avian2d::prelude::TransformInterpolation;
 
 pub mod special_attacks;
 pub mod state;
@@ -37,7 +37,7 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_player)
             .add_systems(FixedUpdate, (
-                // state::detect_ground,
+                state::detect_ground,
                 state::update_animation_status,
                 state::update_playerstate,
                 state::reset_state_ticks,
@@ -68,8 +68,14 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
         // animation_indices,
         PIXEL_PERFECT_LAYERS,
         AirJumpsRemaining(5),
-        Collider::rectangle(4.0, 5.0),
-        RigidBody::Kinematic,
+        Collider::rectangle(8.0, 10.0),
+        ShapeCaster::new(Collider::rectangle(7.0, 10.0), Vec2::ZERO, 0.0, Dir2::NEG_Y)
+            .with_max_distance(2.0)
+            .with_max_hits(4),
+        RigidBody::Dynamic,
+        LockedAxes::ROTATION_LOCKED,
+        Friction::new(0.0).with_combine_rule(CoefficientCombine::Min),
+        Restitution::new(0.0).with_combine_rule(CoefficientCombine::Min),
         Sprite::default(),
     ))
     .insert((

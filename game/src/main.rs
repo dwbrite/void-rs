@@ -7,12 +7,14 @@ mod input;
 mod player;
 mod systems;
 
+use avian2d::debug_render::PhysicsDebugPlugin;
 use avian2d::PhysicsPlugins;
-use avian2d::prelude::{Collider, RigidBody};
+use avian2d::prelude::{Collider, Gravity, RigidBody};
 use bevy::{camera::{RenderTarget, visibility::RenderLayers}, prelude::*, render::render_resource::Extent3d, window::WindowResized};
 use bevy::render::render_resource::{
     TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
+use avian2d::prelude::TransformInterpolation;
 
 /// In-game resolution width.
 const RES_WIDTH: u32 = 640 / 2;
@@ -71,8 +73,6 @@ enum PlayerMovement {
 use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig};
 use bevy_aseprite_ultra::prelude::*;
 use bevy_framepace::FramepacePlugin;
-use bevy_transform_interpolation::interpolation::{TransformInterpolation, TransformInterpolationPlugin};
-
 use player::PlayerPlugin;
 use crate::input::InputPlugin;
 
@@ -107,7 +107,9 @@ fn main() {
         })
         .add_plugins(InputPlugin)
         .add_plugins(PlayerPlugin)
-        .add_plugins(PhysicsPlugins::default())
+        .add_plugins(PhysicsPlugins::default().with_length_unit(26.0))
+        // .add_plugins(PhysicsDebugPlugin::default())
+        .insert_resource(Gravity(Vec2::NEG_Y * 255.06))
         .add_plugins(AsepriteUltraPlugin)
         .insert_resource(Time::<Fixed>::from_hz(128.0))
         .add_systems(Startup, (setup_camera, setup_movement_demo))
@@ -127,7 +129,7 @@ fn setup_movement_demo(
         Transform::from_xyz(0.0, -60.0, 0.0),
         // Mesh2d(meshes.add(Rectangle::new(640.0, 1.0))),
         // MeshMaterial2d(materials.add(Color::srgb(0.122, 0.082, 0.247))),
-        Collider::rectangle(320.0, 1.0),
+        Collider::rectangle(320.0, 0.0),
         RigidBody::Static,
         TransformInterpolation,
     ));
@@ -142,7 +144,6 @@ fn setup_movement_demo(
         },
         // AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
         Sprite::default(),
-        RigidBody::Static,
         TransformInterpolation,
     ));
 }

@@ -119,8 +119,15 @@ pub fn update_playerstate_physics(
                     p.velocity.x = -GROUND_DASH_SPEED;
                 }
             }
-            DashFlop => {
-                p.velocity.x *= 1.0;
+            Slide => {
+                p.status.busy = false;
+                p.status.no_jump = false;
+                ground_friction(&mut p.velocity, SLIDE_MU, SLIDE_DRAG);
+            }
+            DashFlop | DashFlop2 => {
+                p.status.busy = false;
+                p.status.no_jump = false;
+                ground_friction(&mut p.velocity, TRIP_MU, TRIP_DRAG);
             }
             SuperJump => {
                 if p.state_ticks.0 == 10 {
@@ -362,6 +369,7 @@ pub fn update_playerstate_physics(
             _ => {
                 p.status.busy = false;
                 p.status.no_jump = false;
+                ground_friction(&mut p.velocity, 10.0, 0.005);
             }
         }
         p.status.was_spinning = matches!(p.state, SpinMove(_));
@@ -373,6 +381,20 @@ const AIR_ACCEL: f32 = 7.0;
 const AIR_FRICTION_LIN: f32 = 1.3;       // neutral bleed, unchanged
 const AIR_HELD_OVERCAP_FRICTION: f32 = 0.35; // over-cap bleed while holding into it (~45 u/s)
 const CAP_SOFT_BAND: f32 = 14.0;         // accel fades over the last 14 units below cap
+
+const SLIDE_MU: f32 = 0.35;
+const SLIDE_DRAG: f32 = 8.0e-5;
+const TRIP_MU: f32 = 0.6;
+const TRIP_DRAG: f32 = 1.3e-4;
+
+/// `mu`   — flat per-tick decel. Guarantees termination, sets the low-speed feel.
+/// `drag` — quadratic term. Top-end tax only; ~vanishes below 24 u/s.
+fn ground_friction(velocity: &mut LinearVelocity, mu: f32, drag: f32) {
+    let v = velocity.x;
+    if v == 0.0 { return; }
+    let speed = v.abs() - (mu + drag * v * v);
+    velocity.x = if speed <= 0.0 { 0.0 } else { speed * v.signum() };
+}
 
 pub(crate) fn aerial_x_movement(move_x: f32, velocity: &mut LinearVelocity, di: (f32, f32)) {
     let v = velocity.x;
