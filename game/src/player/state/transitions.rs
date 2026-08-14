@@ -1,11 +1,9 @@
 use std::collections::HashSet;
-use bevy::math::Vec2;
+use avian2d::prelude::LinearVelocity;
 use bevy::prelude::{Changed, Component, Entity, MessageReader, Query, ResMut};
-use bevy::tasks::futures_lite::StreamExt;
-use bevy_aseprite_ultra::prelude::{Animation, AnimationEvents, AseAnimation};
-use bevy_rapier2d::dynamics::Velocity;
+use bevy_aseprite_ultra::prelude::{AnimationEvents, AseAnimation};
 use crate::input::{AttackControl, InputAction};
-use crate::player::{CharacterStatus, AIR_JUMP_BASE_IMPULSE, AIR_JUMP_DURATION};
+use crate::player::{CharacterStatus, AIR_JUMP_BASE_IMPULSE};
 use crate::player::state::{AirborneState, Facing, PreviousState, SpringMass};
 use crate::player::state::AirborneState::{Airborne, Grounded};
 use crate::player::state::PlayerState::SuperCrouch;
@@ -45,7 +43,7 @@ pub struct PlayerQuery {
     state_ticks: &'static StateTicks, // was `mut` before, but never written here
     airborne: &'static AirborneState,
     old_state: &'static mut PreviousState,
-    velocity: &'static Velocity,
+    velocity: &'static LinearVelocity,
     facing: &'static mut Facing,
     status: &'static mut CharacterStatus,
     spring_mass: &'static SpringMass,
@@ -83,9 +81,7 @@ use crate::player::state::transitions::AtkDirection::{Fwd, Neutral};
 use bevy::ecs::change_detection::DetectChangesMut;
 use bevy::ecs::query::QueryData;
 use crate::input::AttackControl::{MoveXY, South};
-use crate::player::state::AnimationStatus::{Finished, Playing};
 use crate::player::state::AtkDirection::{Back, Down, Up};
-use crate::player::state::PlayerAction::SpinAttack;
 
 #[derive(Copy, Clone, Debug)]
 pub enum AtkDirection {
@@ -311,7 +307,7 @@ pub fn update_playerstate(
 
             // ChargedPunch rides until we're falling fast or grounded.
             (ChargedPunch, PlayerAction::None) => {
-                let falling_fast = p.velocity.linear.y < -30.0;
+                let falling_fast = p.velocity.y < -30.0;
                 if !p.status.busy && (falling_fast || airborne == Grounded) {
                     *p.state = neutral_state(airborne, &input, &mut p.facing);
                 }
@@ -323,16 +319,16 @@ pub fn update_playerstate(
                 *p.state = ChargedPunch;
             }
 
-            (PlayerState::SpinMove(speed), PlayerAction::None) => {
+            (SpinMove(_speed), PlayerAction::None) => {
                 *p.state = neutral_state(airborne, &input, &mut p.facing);
             }
 
-            (PreDownKick, _) if airborne == Grounded && p.velocity.linear.x.abs() >= 48.0 => {
+            (PreDownKick, _) if airborne == Grounded && p.velocity.x.abs() >= 48.0 => {
                 p.status.slide_charged = true;
                 *p.state = Slide;
             }
 
-            (PlayerState::PreDownKick, _) => {
+            (PreDownKick, _) => {
                 if !input_map.is_down(InputAction::DownRelease) {
                     *p.state = DownKick;
                 }
@@ -357,7 +353,7 @@ pub fn update_playerstate(
             (Interactnt, _) if anim_finished => *p.state = neutral_state(airborne, &input, &mut p.facing),
 
             (ControlledAirborne, PlayerAction::DropDown) => {
-                if p.velocity.linear.y > -AIR_JUMP_BASE_IMPULSE {
+                if p.velocity.y > -AIR_JUMP_BASE_IMPULSE {
                     *p.state = FlickDrop;
                 }
             }
@@ -370,7 +366,7 @@ pub fn update_playerstate(
                         PlayerAction::Attack(_) => *p.state = UpAir,
                         PlayerAction::Jump => *p.state = Jumping,
                         _ => {
-                            if p.velocity.linear.x.abs() <= 1.0 && p.state_ticks.0 >= 16 {
+                            if p.velocity.x.abs() <= 1.0 && p.state_ticks.0 >= 16 {
                                 *p.state = neutral_state(airborne, &input, &mut p.facing);
                             }
                         }
@@ -481,7 +477,7 @@ pub fn update_playerstate(
                         }
                     },
                     Back => {
-                        if matches!(airborne, Grounded) && p.velocity.linear.x.abs() > 64.0 {
+                        if matches!(airborne, Grounded) && p.velocity.x.abs() > 64.0 {
                             DashFlop
                         } else if matches!(airborne, Grounded) {
                             *p.facing = match *p.facing {
@@ -494,7 +490,7 @@ pub fn update_playerstate(
                         }
                     },
                     Fwd => {
-                        if matches!(airborne, Grounded) && p.velocity.linear.x.abs() > 64.0 {
+                        if matches!(airborne, Grounded) && p.velocity.x.abs() > 64.0 {
                             DashFlop
                         } else {
                             FwdAir

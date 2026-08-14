@@ -1,11 +1,6 @@
+use avian2d::prelude::LinearVelocity;
 use bevy::prelude::{Component, Query};
-use bevy::math::Vec2;
-use bevy_rapier2d::prelude::Velocity;
-use crate::input::{AttackControl, InputAction};
 use crate::player::state::AtkDirection;
-use crate::player::state::AtkDirection::{Back, Down, Fwd, Up};
-use crate::systems::input::ActionMap;
-
 #[derive(Component, Debug)]
 pub struct StateTicks(pub u32);
 
@@ -129,9 +124,9 @@ pub struct SpringMass {
     pub parent_coupling: f32, // how much parent acceleration effects teh sproing
 }
 
-pub fn sproing(mut query: Query<(&mut SpringMass, &Velocity)>) {
+pub fn sproing(mut query: Query<(&mut SpringMass, &LinearVelocity)>) {
     for (mut spring, velocity) in &mut query {
-        let parent_vy = velocity.linear.y;
+        let parent_vy = velocity.y;
 
         // parent velocity changes excite teh sproing
         let parent_dv = parent_vy - spring.last_parent_vy;

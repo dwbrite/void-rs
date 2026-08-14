@@ -5,6 +5,62 @@
       <sourceFolder url="file://$MODULE_DIR$/game/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/ir-parser/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/ir/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bevy_mod_scripting_asset/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bevy_mod_scripting_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bevy_mod_scripting_bindings_domain/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bevy_mod_scripting_core/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bevy_mod_scripting_derive/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bevy_mod_scripting_display/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bevy_mod_scripting_functions/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bevy_mod_scripting_script/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bevy_mod_scripting_world/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bevy_system_reflection/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_a11y_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_animation_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_asset_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_camera_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_color_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_core_pipeline_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_ecs_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_gizmos_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_gltf_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_image_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_input_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_input_focus_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_light_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_math_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_mesh_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_pbr_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_picking_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_post_process_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_reflect_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_render_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_scene_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_sprite_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_sprite_render_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_text_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_time_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_transform_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_ui_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_ui_render_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/bindings/bevy_ui_widgets_bms_bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/lad_backends/lua_language_server_lad_backend/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/lad_backends/lua_language_server_lad_backend/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/lad_backends/mdbook_lad_preprocessor/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/lad_backends/mdbook_lad_preprocessor/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/ladfile/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/ladfile_builder/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/languages/bevy_mod_scripting_lua/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/languages/bevy_mod_scripting_rhai/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/languages/bevy_mod_scripting_steel/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/testing_crates/bevy_mod_scripting_test_scenario_syntax/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/testing_crates/script_integration_test_harness/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/crates/testing_crates/test_utils/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bevy_mod_scripting/tests" isTestSource="true" />
+      <excludeFolder url="file://$MODULE_DIR$/bevy_mod_scripting/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

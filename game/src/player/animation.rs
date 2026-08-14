@@ -1,12 +1,10 @@
-use std::collections::HashSet;
+
+use avian2d::prelude::LinearVelocity;
 use bevy::math::ops::abs;
-use bevy::prelude::{Changed, Entity, Query, Res, Sprite};
-use bevy::ui::State;
-use bevy_aseprite_ultra::prelude::{Animation, AnimationDirection, AnimationEvents, AnimationRepeat, AseAnimation};
+use bevy::prelude::{Changed, Query, Res, Sprite};
+use bevy_aseprite_ultra::prelude::{Animation, AnimationRepeat, AseAnimation};
 use bevy_aseprite_ultra::prelude::AnimationRepeat::{Count, Loop};
-use bevy_rapier2d::prelude::Velocity;
-use crate::input::{AttackControl, InputAction};
-use crate::player::AIR_SPEED;
+use crate::input::{InputAction};
 use crate::player::state::{spin_input_speed, Facing, PlayerState, SpringMass, StateTicks};
 use crate::systems::input::ActionMap;
 
@@ -18,7 +16,7 @@ pub fn flip_sprite(mut query: Query<(&Facing, &mut Sprite), Changed<Facing>>) {
 
 pub fn playerstate_animation(
     input_map: Res<ActionMap<InputAction>>,
-    mut query: Query<(&PlayerState, &mut AseAnimation, &Velocity, &StateTicks, &SpringMass)>,
+    mut query: Query<(&PlayerState, &mut AseAnimation, &LinearVelocity, &StateTicks, &SpringMass)>,
 ) {
     let move_y = input_map.value(InputAction::MoveY);
     for (playerstate, mut animation, velocity, ticks, spring) in &mut query {
@@ -26,10 +24,10 @@ pub fn playerstate_animation(
             PlayerState::Idle | PlayerState::Running | PlayerState::FlickDrop => {
                 match spring.y {
                     y if y >= -10.0 && playerstate == &PlayerState::Running => {
-                        if velocity.linear.x.abs() <= 56.0 {
-                            animation.animation = Animation::tag("run").with_speed(abs(velocity.linear.x / 56.0));
+                        if velocity.x.abs() <= 56.0 {
+                            animation.animation = Animation::tag("run").with_speed(abs(velocity.x / 56.0));
                         } else {
-                            animation.animation = Animation::tag("RUNNNN").with_speed(abs(velocity.linear.x / 56.0));
+                            animation.animation = Animation::tag("RUNNNN").with_speed(abs(velocity.x / 56.0));
                         }
                     }
                     y if y > 5.0 => { animation.animation = Animation::tag("lookup1"); }
@@ -94,7 +92,7 @@ pub fn playerstate_animation(
             PlayerState::DownKick if ticks.0 == 0 => {
                 animation.animation = Animation::tag("dkick").with_repeat(Count(0));
             }
-            PlayerState::SpinMove(speed) => {
+            PlayerState::SpinMove(_speed) => {
                 let live = spin_input_speed(&input_map);
                 animation.animation = Animation::tag("downair").with_repeat(Loop).with_speed(3.0*live + 0.4);
             }
@@ -120,7 +118,7 @@ pub fn playerstate_animation(
             //     animation.animation = Animation::tag("smashdrop").with_repeat(Count(0));
             // }
             PlayerState::ControlledAirborne => {
-                match velocity.linear.y {
+                match velocity.y {
                     y if y < -80. => animation.animation = Animation::tag("fast fall"),
                     y if y < -20. => animation.animation = Animation::tag("fall2"),
                     y if y < -10. => animation.animation = Animation::tag("fall1"),

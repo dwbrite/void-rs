@@ -16,14 +16,17 @@ opt-level = 3
 
 
 [dependencies]
-bevy = { version = "0.18.1", default-features = false, features = ["2d", "bevy_dev_tools", "bevy_ui_debug", "ui", "gamepad", "asset_processor"] }
-bevy_rapier2d = { version = "*", features = [ "simd-stable", "debug-render-2d" ] }
-bevy_aseprite_ultra = { version = "0.8.2",  features = ["asset_processing"]}
+bevy = { version = "0.19.0", default-features = false, features = ["2d", "bevy_dev_tools", "bevy_ui_debug", "ui", "gamepad", "asset_processor"] }
+bevy_aseprite_ultra = { version = "0.9.0",  features = ["asset_processing"]}
+avian2d = "0.7"
+
+
+bevy_framepace = { version = "0.22.0" }
+bevy_transform_interpolation = "0.5"
+
+steel-core = { git="https://github.com/mattwparas/steel.git", branch = "master", features = ["sync"] }
+
 heapless = "0.9.3"
-
-ir = { path = "../ir" }
 enum-map = "2.7.3"
-
-
-[build-dependencies]
-ir-parser = { path = "../ir-parser" }
+crossbeam-channel = "0.5.16"
+chrono = "0.4.45"

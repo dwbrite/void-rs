@@ -16,10 +16,10 @@ pub mod detect;
 pub mod signal;
 
 pub use action::{ActionLike, ActionMap};
-pub use binding::{Binding, DeviceFilter, Processor};
+pub use binding::{Binding, Processor};
 pub use config::DetectorConfig;
-pub use detect::{InputSignals, PadSignals};
-pub use signal::{RollDir, Signal, SignalId, Stick};
+pub use detect::{InputSignals};
+pub use signal::{RollDir, Stick};
 
 use bevy::prelude::*;
 use std::marker::PhantomData;

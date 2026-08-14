@@ -1,9 +1,11 @@
+use avian2d::dynamics::integrator::IntegrationSystems::Velocity;
+use avian2d::prelude::{Collider, GravityScale, LinearVelocity, RigidBody};
 use bevy::app::{App, FixedUpdate, Plugin, Startup};
 use bevy::asset::AssetServer;
 use bevy::prelude::*;
+use bevy::ui::Gradient::Linear;
 use bevy_aseprite_ultra::prelude::{Animation, AseAnimation, Aseprite};
-use bevy_rapier2d::dynamics::Velocity;
-use bevy_rapier2d::prelude::{ActiveEvents, Ccd, Collider, GravityScale, LockedAxes, RigidBody};
+use bevy_transform_interpolation::interpolation::TransformInterpolation;
 use crate::{AnimationIndices, AnimationTimer, PIXEL_PERFECT_LAYERS};
 use crate::player::state::{sproing, AirJumpsRemaining, AirborneState, AnimationStatus, Facing, PlayerAction, PlayerState, PreviousState, SpringMass, StateTicks};
 
@@ -35,7 +37,7 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_player)
             .add_systems(FixedUpdate, (
-                state::detect_ground,
+                // state::detect_ground,
                 state::update_animation_status,
                 state::update_playerstate,
                 state::reset_state_ticks,
@@ -66,14 +68,14 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
         // animation_indices,
         PIXEL_PERFECT_LAYERS,
         AirJumpsRemaining(5),
-        Collider::cuboid(4.0, 5.0),
-        RigidBody::Dynamic,
+        Collider::rectangle(4.0, 5.0),
+        RigidBody::Kinematic,
         Sprite::default(),
     ))
     .insert((
-        Velocity::zero(),
-        ActiveEvents::COLLISION_EVENTS,
-        LockedAxes::ROTATION_LOCKED,
+        LinearVelocity::ZERO,
+        // ActiveEvents::COLLISION_EVENTS,
+        // LockedAxes::ROTATION_LOCKED,
         AseAnimation {
             aseprite: asset_server.load::<Aseprite>("gamer.aseprite"),
             animation: Animation::tag("slide"),
@@ -106,9 +108,10 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
             parent_coupling: 0.06,
         },
         AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
-        Ccd::enabled(),
+        // Ccd::enabled(),
         GravityScale(1.0),
         AnimationStatus::Finished,
+        TransformInterpolation,
     ));
 }
 
@@ -134,7 +137,7 @@ pub struct KineticEnergy {
 }
 
 pub fn update_kinetic_energy(
-    mut query: Query<&mut KineticEnergy>,
+    query: Query<&mut KineticEnergy>,
 ) {
     const DECAY_FRAMES: f32 = 10.0;
     for mut ke in query {

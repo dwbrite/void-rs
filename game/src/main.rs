@@ -7,8 +7,9 @@ mod input;
 mod player;
 mod systems;
 
-use bevy::{camera::{RenderTarget, visibility::RenderLayers}, color::palettes::css::GRAY, prelude::*, render::render_resource::Extent3d, window::WindowResized};
-use bevy::asset::ErasedAssetLoader;
+use avian2d::PhysicsPlugins;
+use avian2d::prelude::{Collider, RigidBody};
+use bevy::{camera::{RenderTarget, visibility::RenderLayers}, prelude::*, render::render_resource::Extent3d, window::WindowResized};
 use bevy::render::render_resource::{
     TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
@@ -67,22 +68,25 @@ enum PlayerMovement {
 }
 
 
-use bevy::prelude::*;
 use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig};
 use bevy_aseprite_ultra::prelude::*;
-use bevy_rapier2d::na::DimAdd;
-use bevy_rapier2d::prelude::*;
+use bevy_framepace::FramepacePlugin;
+use bevy_transform_interpolation::interpolation::{TransformInterpolation, TransformInterpolationPlugin};
+
 use player::PlayerPlugin;
 use crate::input::InputPlugin;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+        .add_plugins(FramepacePlugin)
+        // TODO: find out what else is doing this shit
+        // .add_plugins(TransformInterpolationPlugin::default())
         .add_plugins(FpsOverlayPlugin {
             config: FpsOverlayConfig {
                 text_config: TextFont {
                     // Here we define size of our overlay
-                    font_size: 12.0,
+                    font_size: FontSize::Px(12.0),
                     // If we want, we can use a custom font
                     font: default(),
                     ..default()
@@ -103,8 +107,7 @@ fn main() {
         })
         .add_plugins(InputPlugin)
         .add_plugins(PlayerPlugin)
-        .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(26.0))
-        // .add_plugins(RapierDebugRenderPlugin::default())
+        .add_plugins(PhysicsPlugins::default())
         .add_plugins(AsepriteUltraPlugin)
         .insert_resource(Time::<Fixed>::from_hz(128.0))
         .add_systems(Startup, (setup_camera, setup_movement_demo))
@@ -115,8 +118,8 @@ fn main() {
 
 fn setup_movement_demo(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    meshes: ResMut<Assets<Mesh>>,
+    materials: ResMut<Assets<ColorMaterial>>,
     _asset_server: Res<AssetServer>,
 ) {
     commands.spawn((
@@ -124,8 +127,9 @@ fn setup_movement_demo(
         Transform::from_xyz(0.0, -60.0, 0.0),
         // Mesh2d(meshes.add(Rectangle::new(640.0, 1.0))),
         // MeshMaterial2d(materials.add(Color::srgb(0.122, 0.082, 0.247))),
-        Collider::cuboid(320.0, 0.5),
-        RigidBody::Fixed,
+        Collider::rectangle(320.0, 1.0),
+        RigidBody::Static,
+        TransformInterpolation,
     ));
 
     // Keep backdrop sprite separate from the mesh/collider floor entity.
@@ -138,7 +142,8 @@ fn setup_movement_demo(
         },
         // AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
         Sprite::default(),
-        RigidBody::Fixed,
+        RigidBody::Static,
+        TransformInterpolation,
     ));
 }
 
@@ -185,6 +190,7 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         Msaa::Off,
         InGameCamera,
         PIXEL_PERFECT_LAYERS,
+        TransformInterpolation,
     ));
 
     // Spawn the canvas

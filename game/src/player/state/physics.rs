@@ -1,9 +1,8 @@
+use avian2d::prelude::{GravityScale, LinearVelocity};
 use bevy::prelude::Query;
 use bevy::ecs::query::QueryData;
-use bevy_rapier2d::dynamics::Velocity;
-use bevy_rapier2d::prelude::GravityScale;
 use crate::input::InputAction;
-use crate::player::{air_shit, special_attacks, CharacterStatus, AIR_FRICTION, AIR_JUMP_BASE_IMPULSE, AIR_SPEED};
+use crate::player::{air_shit, special_attacks, CharacterStatus, AIR_JUMP_BASE_IMPULSE};
 use crate::systems::input::ActionMap;
 use super::types::{AirJumpsRemaining, Facing, PlayerState, StateTicks, AirborneState, SpringMass};
 
@@ -26,10 +25,10 @@ use PlayerState::*;
 use crate::player::state::AirborneState::Grounded;
 use crate::player::state::{spin_input_speed, PreviousState};
 
-fn old_school_gravity(status: &CharacterStatus, velocity: &Velocity, gravity: &mut GravityScale) {
+fn old_school_gravity(status: &CharacterStatus, velocity: &LinearVelocity, gravity: &mut GravityScale) {
     gravity.0 = if !status.holding_jump {
         1.0
-    } else if velocity.linear.y > 0.0 {
+    } else if velocity.y > 0.0 {
         HELD_ASCENT_GRAVITY   // rising + held: extend the jump
     } else {
         FLOAT_FALL_GRAVITY    // fell past apex still holding: feather fall
@@ -42,7 +41,7 @@ pub struct PlayerPhysicsQuery {
     state: &'static PlayerState,
     state_ticks: &'static StateTicks,
     airborne: &'static AirborneState,
-    velocity: &'static mut Velocity,
+    velocity: &'static mut LinearVelocity,
     facing: &'static Facing,
     status: &'static mut CharacterStatus,
     air_jumps: &'static AirJumpsRemaining,
@@ -87,7 +86,7 @@ pub fn update_playerstate_physics(
                 let t = (p.status.ticks_since_landed as f32 / LANDING_BLEND_TICKS).clamp(0.0, 1.0);
 
                 // move 64 to run speed target minimum
-                let target_speed = if p.velocity.linear.x.abs() > 48.0 {
+                let target_speed = if p.velocity.x.abs() > 48.0 {
                     move_x * GROUND_DASH_SPEED
                 } else {
                     move_x * GROUND_SPEED
@@ -95,8 +94,8 @@ pub fn update_playerstate_physics(
 
                 if move_x.abs() >= 0.25 {
                     let target = target_speed;
-                    let same_dir = target * p.velocity.linear.x > 0.0;
-                    let carrying_speed = p.velocity.linear.x.abs() > target.abs();
+                    let same_dir = target * p.velocity.x > 0.0;
+                    let carrying_speed = p.velocity.x.abs() > target.abs();
 
                     let grip = if same_dir && carrying_speed {
                         // landed with momentum in the direction you're pushing:
@@ -108,37 +107,37 @@ pub fn update_playerstate_physics(
                         1.0
                     };
 
-                    p.velocity.linear.x += (target - p.velocity.linear.x) * grip;
+                    p.velocity.x += (target - p.velocity.x) * grip;
                 } else {
-                    p.velocity.linear.x *= 0.90;
+                    p.velocity.x *= 0.90;
                 }
             }
             FlickDash => {
                 if move_x >= 0.0 {
-                    p.velocity.linear.x = GROUND_DASH_SPEED;
+                    p.velocity.x = GROUND_DASH_SPEED;
                 } else {
-                    p.velocity.linear.x = -GROUND_DASH_SPEED;
+                    p.velocity.x = -GROUND_DASH_SPEED;
                 }
             }
             DashFlop => {
-                p.velocity.linear.x *= 1.0;
+                p.velocity.x *= 1.0;
             }
             SuperJump => {
                 if p.state_ticks.0 == 10 {
                     p.status.busy = true;
                     p.status.no_jump = true;
 
-                    p.velocity.linear.y = AIR_JUMP_BASE_IMPULSE*2.0;
+                    p.velocity.y = AIR_JUMP_BASE_IMPULSE*2.0;
 
                     // Prioritize player intent on jump start to avoid carrying stale ground momentum.
-                    p.velocity.linear.x = 120. * move_x;
+                    p.velocity.x = 120. * move_x;
                 }
 
                 if p.state_ticks.0 >= 15 {
                     p.status.busy = false;
                 }
 
-                if p.state_ticks.0 >= 100 || p.velocity.linear.y < 30.0 {
+                if p.state_ticks.0 >= 100 || p.velocity.y < 30.0 {
                     p.status.no_jump = false;
                 }
                 aerial_x_movement(move_x, &mut p.velocity, di_multiplier);
@@ -150,30 +149,30 @@ pub fn update_playerstate_physics(
             Jumping => {
                 if p.state_ticks.0 == 0 {
                     let intent = 80. * move_x;
-                    p.velocity.linear.x = if intent * p.velocity.linear.x > 0.0
-                        && p.velocity.linear.x.abs() > intent.abs()
+                    p.velocity.x = if intent * p.velocity.x > 0.0
+                        && p.velocity.x.abs() > intent.abs()
                     {
-                        p.velocity.linear.x   // already faster in the intended direction: keep it
+                        p.velocity.x   // already faster in the intended direction: keep it
                     } else {
                         intent              // standstill / reversal: old behavior
                     };
 
                     if p.status.holding_jump {
                         let spring_mult = 1.0 + (p.spring_mass.vy / 11.0);
-                        p.velocity.linear.y = AIR_JUMP_BASE_IMPULSE * 0.8 * spring_mult; // full impulse, frame 0
+                        p.velocity.y = AIR_JUMP_BASE_IMPULSE * 0.8 * spring_mult; // full impulse, frame 0
                     } else {
                         println!("short-hop");
-                        p.velocity.linear.y = AIR_JUMP_BASE_IMPULSE * 0.65; // full impulse, frame 0
+                        p.velocity.y = AIR_JUMP_BASE_IMPULSE * 0.65; // full impulse, frame 0
                     }
                 }
                 if p.state_ticks.0 >= 4 {
                     p.status.busy = false;
                 }
                 old_school_gravity(&p.status, &p.velocity, &mut p.gravity);
-                if p.state_ticks.0 >= 100 || p.velocity.linear.y < 30.0 {
+                if p.state_ticks.0 >= 100 || p.velocity.y < 30.0 {
                     p.status.no_jump = false;
                 }
-                p.velocity.linear.y = p.velocity.linear.y.max(-AIR_JUMP_BASE_IMPULSE * 1.4); // terminal vel
+                p.velocity.y = p.velocity.y.max(-AIR_JUMP_BASE_IMPULSE * 1.4); // terminal vel
                 aerial_x_movement(move_x, &mut p.velocity, di_multiplier);
             }
             AirJump => {
@@ -205,7 +204,7 @@ pub fn update_playerstate_physics(
                     // TODO: did_hit, and make it check for the entire durations
                     let did_hit = false;
                     if did_hit || matches!(p.airborne, Grounded) {
-                        p.velocity.linear.y = AIR_JUMP_BASE_IMPULSE * 0.75;
+                        p.velocity.y = AIR_JUMP_BASE_IMPULSE * 0.75;
                     }
 
                     p.status.busy = false;
@@ -245,8 +244,8 @@ pub fn update_playerstate_physics(
                     p.status.busy = false;
                 }
 
-                if p.velocity.linear.y > -AIR_JUMP_BASE_IMPULSE * 1.0 {
-                    p.velocity.linear.y = -AIR_JUMP_BASE_IMPULSE * 1.0;
+                if p.velocity.y > -AIR_JUMP_BASE_IMPULSE * 1.0 {
+                    p.velocity.y = -AIR_JUMP_BASE_IMPULSE * 1.0;
                 }
                 old_school_gravity(&p.status, &p.velocity, &mut p.gravity);
             }
@@ -271,7 +270,7 @@ pub fn update_playerstate_physics(
 
                         p.gravity.0 = 1.0;
                         let accel = SPIN_GROUND_ACCEL * live_spin.clamp(0.2, 1.5);
-                        let v = p.velocity.linear.x;
+                        let v = p.velocity.x;
 
                         // Accel only pushes you up to the cap — never reduces over-cap speed.
                         // (Same .max(v) trick as the air code: the clamp can't pull you down.)
@@ -282,28 +281,28 @@ pub fn update_playerstate_physics(
                         } else {
                             v
                         };
-                        p.velocity.linear.x = nv;
+                        p.velocity.x = nv;
 
                         // Carried over-cap momentum bleeds gently toward the cap instead of snapping.
-                        if p.velocity.linear.x.abs() > max_speed {
-                            let target = max_speed * p.velocity.linear.x.signum();
-                            let d = p.velocity.linear.x - target;
-                            p.velocity.linear.x = if d.abs() <= SPIN_GROUND_OVERCAP_FRICTION {
+                        if p.velocity.x.abs() > max_speed {
+                            let target = max_speed * p.velocity.x.signum();
+                            let d = p.velocity.x - target;
+                            p.velocity.x = if d.abs() <= SPIN_GROUND_OVERCAP_FRICTION {
                                 target
                             } else {
-                                p.velocity.linear.x - SPIN_GROUND_OVERCAP_FRICTION * d.signum()
+                                p.velocity.x - SPIN_GROUND_OVERCAP_FRICTION * d.signum()
                             };
                         }
 
                         if move_x.abs() < 0.25 {
-                            p.velocity.linear.x *= 0.985;
+                            p.velocity.x *= 0.985;
                         }
                     }
                     AirborneState::Airborne => {
                         if p.status.spin_can_float {
                             p.status.spin_float_used = true;
 
-                            if p.velocity.linear.y > 0.0 {
+                            if p.velocity.y > 0.0 {
                                 // Still rising: the float doesn't touch ascent. Normal gravity
                                 // bends the jump over naturally; the catch waits at the apex.
                                 p.gravity.0 = 1.0;
@@ -318,7 +317,7 @@ pub fn update_playerstate_physics(
                                 let rate = SPIN_CATCH_RATE * (c * c);
 
                                 let target_sink = -(SPIN_FLOAT_SINK + (SPIN_END_SINK - SPIN_FLOAT_SINK) * t * t);
-                                p.velocity.linear.y += (target_sink - p.velocity.linear.y) * rate;
+                                p.velocity.y += (target_sink - p.velocity.y) * rate;
                             }
                         } else {
                             p.gravity.0 = 1.5;
@@ -349,10 +348,10 @@ pub fn update_playerstate_physics(
                 }
 
                 // yay magic number :3
-                p.velocity.linear.x *= 0.92;
+                p.velocity.x *= 0.92;
 
-                p.velocity.linear.y *= 0.999;
-                p.velocity.linear.y -= 12.0;
+                p.velocity.y *= 0.999;
+                p.velocity.y -= 12.0;
             }
             Interact => {
                 p.status.busy = true;
@@ -375,8 +374,8 @@ const AIR_FRICTION_LIN: f32 = 1.3;       // neutral bleed, unchanged
 const AIR_HELD_OVERCAP_FRICTION: f32 = 0.35; // over-cap bleed while holding into it (~45 u/s)
 const CAP_SOFT_BAND: f32 = 14.0;         // accel fades over the last 14 units below cap
 
-pub(crate) fn aerial_x_movement(move_x: f32, velocity: &mut Velocity, di: (f32, f32)) {
-    let v = velocity.linear.x;
+pub(crate) fn aerial_x_movement(move_x: f32, velocity: &mut LinearVelocity, di: (f32, f32)) {
+    let v = velocity.x;
     // di scales authority, not the ceiling. >1 (BackAir 1.3) still raises it — that's a perk.
     let cap = AIR_MAX_SPEED * di.0.max(1.0);
     let accel = move_x * AIR_ACCEL * di.0;
@@ -410,5 +409,5 @@ pub(crate) fn aerial_x_movement(move_x: f32, velocity: &mut Velocity, di: (f32, 
         nv = if nv.abs() <= AIR_FRICTION_LIN { 0.0 } else { nv - AIR_FRICTION_LIN * nv.signum() };
     }
 
-    velocity.linear.x = nv;
+    velocity.x = nv;
 }
